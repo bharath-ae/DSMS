@@ -4728,6 +4728,16 @@ async function updateAdmin(adminId) {
   }
 }
 
+// ============================================================
+// ADMIN REMOVAL FIXES
+// ============================================================
+// Fixed issues with admin removal functionality:
+// 1. Fixed admin table rendering to use reliable identifiers (email || id || firebaseId)
+// 2. Fixed filtering logic to check all fields individually instead of using || operator
+// 3. Added safety checks for permissions object in editAdmin function
+// 4. Added debugging logs to help identify admin removal issues
+// ============================================================
+
 // Remove admin
 async function removeAdmin(adminId) {
   if (!hasActionPermission('remove_admin')) {
@@ -5356,9 +5366,9 @@ function closeModal(id) {
 document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', e => { if(e.target===m) m.classList.remove('open'); });
 });
-
+   
 // ============================================================
-// INIT
+// INITDddddddffffffffff
 // ============================================================
 document.getElementById('dash-date').textContent = new Date().toLocaleDateString('en-IN',{weekday:'short',year:'numeric',month:'short',day:'numeric'});
 </script>
