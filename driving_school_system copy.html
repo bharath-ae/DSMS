@@ -2747,8 +2747,8 @@ async function renderOverallDashboard() {
     const elements = {
       'total-schools': '0',
       'total-students-all': '0', 
-      'total-revenue': '&#8377;0',
-      'total-expenses': '&#8377;0',
+      'total-revenue': '0',
+      'total-expenses': '0',
       'total-instructors': '0',
       'total-classes': '0'
     };
@@ -2786,8 +2786,8 @@ async function renderOverallDashboard() {
   const statsElements = {
     'total-schools': userSchools.length,
     'total-students-all': totalStudents,
-    'total-revenue': '&#8377;' + totalRevenue.toLocaleString(),
-    'total-expenses': '&#8377;' + totalExpenses.toLocaleString(),
+    'total-revenue': '0' + totalRevenue.toLocaleString(),
+    'total-expenses': '0' + totalExpenses.toLocaleString(),
     'total-instructors': totalInstructors,
     'total-classes': totalClasses
   };
@@ -4001,12 +4001,7 @@ function renderReport() {
 
   if(period==='monthly') {
     const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    const monthData = [
-      {income:0,expense:0},{income:0,expense:0},{income:0,expense:0},
-      {income:0,expense:0},{income:0,expense:0},{income:0,expense:0},
-      {income:0,expense:0},{income:0,expense:0},{income:0,expense:0},
-      {income:0,expense:0},{income:0,expense:0},{income:0,expense:0}
-    ];
+    const monthData = [];
     const totalIncome = monthData.reduce((s,m)=>s+m.income,0);
     const totalExpense = monthData.reduce((s,m)=>s+m.expense,0);
 
@@ -4037,7 +4032,7 @@ function renderReport() {
       </div>
     </div>`;
   } else {
-    const years = [{year:new Date().getFullYear(),income:0,expense:0}];
+    const years = [];
     rc.innerHTML = `<div class="report-section">
       <div class="report-header">
         <h3>Yearly Financial Report</h3>
