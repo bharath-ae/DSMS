@@ -551,8 +551,8 @@
         <div class="stats-grid">
           <div class="stat-card accent"><div class="sc-label">Total Schools</div><div class="sc-value" style="color:var(--primary)" id="total-schools">0</div><div class="sc-sub">Active schools</div></div>
           <div class="stat-card blue"><div class="sc-label">Total Students</div><div class="sc-value" style="color:var(--accent2)" id="total-students-all">0</div><div class="sc-sub">Across all schools</div></div>
-          <div class="stat-card green"><div class="sc-label">Total Revenue</div><div class="sc-value" style="color:var(--success)" id="total-revenue">₹0</div><div class="sc-sub">This month</div></div>
-          <div class="stat-card red"><div class="sc-label">Total Expenses</div><div class="sc-value" style="color:var(--danger)" id="total-expenses">₹0</div><div class="sc-sub">This month</div></div>
+          <div class="stat-card green"><div class="sc-label">Total Revenue</div><div class="sc-value" style="color:var(--success)" id="total-revenue">0</div><div class="sc-sub">This month</div></div>
+          <div class="stat-card red"><div class="sc-label">Total Expenses</div><div class="sc-value" style="color:var(--danger)" id="total-expenses">0</div><div class="sc-sub">This month</div></div>
           <div class="stat-card"><div class="sc-label">Total Instructors</div><div class="sc-value" id="total-instructors">0</div><div class="sc-sub">Across all schools</div></div>
           <div class="stat-card"><div class="sc-label">Total Classes</div><div class="sc-value" id="total-classes">0</div><div class="sc-sub">Scheduled today</div></div>
         </div>
@@ -625,8 +625,8 @@
                 <div class="stats-grid">
           <div class="stat-card accent"><div class="sc-label">Total Students</div><div class="sc-value" style="color:var(--primary)">0</div><div class="sc-sub">Total enrolled</div></div>
           <div class="stat-card blue"><div class="sc-label">Active Learners</div><div class="sc-value" style="color:var(--accent2)">0</div><div class="sc-sub">Currently learning</div></div>
-          <div class="stat-card green"><div class="sc-label">Today's Income</div><div class="sc-value" style="color:var(--success)">₹0</div><div class="sc-sub">Fees collected</div></div>
-          <div class="stat-card red"><div class="sc-label">Today's Expense</div><div class="sc-value" style="color:var(--danger)">₹0</div><div class="sc-sub">Operational costs</div></div>
+          <div class="stat-card green"><div class="sc-label">Today's Income</div><div class="sc-value" style="color:var(--success)">0</div><div class="sc-sub">Fees collected</div></div>
+          <div class="stat-card red"><div class="sc-label">Today's Expense</div><div class="sc-value" style="color:var(--danger)">0</div><div class="sc-sub">Operational costs</div></div>
           <div class="stat-card"><div class="sc-label">DL Tests Scheduled</div><div class="sc-value">0</div><div class="sc-sub">Upcoming tests</div></div>
           <div class="stat-card"><div class="sc-label">Instructors</div><div class="sc-value">0</div><div class="sc-sub">Total instructors</div></div>
         </div>
@@ -900,8 +900,8 @@
           <button class="btn btn-accent" data-action="add_fuel_entry" onclick="openModal('modal-add-fuel')">+ Add Entry</button>
         </div>
         <div class="stats-grid">
-          <div class="stat-card accent"><div class="sc-label">This Month Fuel</div><div class="sc-value" style="color:var(--primary)">₹0</div><div class="sc-sub">Total spent</div></div>
-          <div class="stat-card"><div class="sc-label">Avg per Day</div><div class="sc-value">₹0</div><div class="sc-sub">Last 30 days</div></div>
+          <div class="stat-card accent"><div class="sc-label">This Month Fuel</div><div class="sc-value" style="color:var(--primary)">0</div><div class="sc-sub">Total spent</div></div>
+          <div class="stat-card"><div class="sc-label">Avg per Day</div><div class="sc-value">0</div><div class="sc-sub">Last 30 days</div></div>
           <div class="stat-card blue"><div class="sc-label">Total KM</div><div class="sc-value" style="color:var(--accent2)">0</div><div class="sc-sub">This month</div></div>
         </div>
         <div class="two-col">
@@ -2603,8 +2603,8 @@ async function renderOverallDashboard() {
     const elements = {
       'total-schools': '0',
       'total-students-all': '0', 
-      'total-revenue': '&#8377;0',
-      'total-expenses': '&#8377;0',
+      'total-revenue': '0',
+      'total-expenses': '0',
       'total-instructors': '0',
       'total-classes': '0'
     };
@@ -2642,8 +2642,8 @@ async function renderOverallDashboard() {
   const statsElements = {
     'total-schools': userSchools.length,
     'total-students-all': totalStudents,
-    'total-revenue': '&#8377;' + totalRevenue.toLocaleString(),
-    'total-expenses': '&#8377;' + totalExpenses.toLocaleString(),
+    'total-revenue': totalRevenue.toLocaleString(),
+    'total-expenses': totalExpenses.toLocaleString(),
     'total-instructors': totalInstructors,
     'total-classes': totalClasses
   };
@@ -5231,24 +5231,48 @@ async function removeStaff(staffId) {
       return;
     }
     
-    const staffRef = db.collection('schools').doc(currentSchoolId).collection('staff').doc(staffId);
-    const staffDoc = await staffRef.get();
+    let staffDoc = null;
+    let staffData = null;
+    let collectionType = '';
     
-    if (!staffDoc.exists) {
-      alert('Staff member not found');
+    // First try to find in staff collection
+    const staffRef = db.collection('schools').doc(currentSchoolId).collection('staff').doc(staffId);
+    const staffSnapshot = await staffRef.get();
+    
+    if (staffSnapshot.exists) {
+      staffDoc = staffSnapshot;
+      staffData = staffSnapshot.data();
+      collectionType = 'staff';
+    } else {
+      // If not found in staff, try users collection (for managers)
+      const userRef = db.collection('schools').doc(currentSchoolId).collection('users').doc(staffId);
+      const userSnapshot = await userRef.get();
+      
+      if (userSnapshot.exists) {
+        staffDoc = userSnapshot;
+        staffData = userSnapshot.data();
+        collectionType = 'user';
+      }
+    }
+    
+    if (!staffDoc) {
+      alert('Staff member not found in both staff and user collections');
       return;
     }
     
-    const staff = staffDoc.data();
-    
-    // Remove from Firebase
-    await staffRef.delete();
+    // Remove from the appropriate collection
+    await staffDoc.ref.delete();
     
     // Update local data
-    data.staff = data.staff.filter(s => s.id !== staffId);
+    if (collectionType === 'staff') {
+      data.staff = data.staff.filter(s => s.id !== staffId);
+    } else {
+      // If it's a user, also remove from staff display if it exists there
+      data.staff = data.staff.filter(s => s.id !== staffId);
+    }
     
     renderStaffTable();
-    addNotification(`Staff member "${staff.name}" has been removed`, 'info');
+    addNotification(`Staff member "${staffData.name || staffData.email || staffId}" has been removed`, 'info');
     
   } catch (error) {
     console.error('Error removing staff:', error);
