@@ -4308,8 +4308,8 @@ function renderAdminsTable() {
       <td style="color:var(--text2);font-size:12px;">${admin.addedOn || admin.createdAt || 'Unknown'}</td>
       <td>
         <div style="display:flex;gap:5px;">
-          <button class="btn btn-outline btn-sm" onclick="editAdmin('${admin.email || 'unknown'}')" data-action="edit_admin">Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="removeAdmin('${admin.email || 'unknown'}')" data-action="remove_admin">Remove</button>
+          <button class="btn btn-outline btn-sm" onclick="editAdmin('${admin.email || admin.id || admin.firebaseId || 'unknown'}')" data-action="edit_admin">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="removeAdmin('${admin.email || admin.id || admin.firebaseId || 'unknown'}')" data-action="remove_admin">Remove</button>
         </div>
       </td>
     </tr>
@@ -4597,11 +4597,12 @@ function editAdmin(adminId) {
     document.getElementById('admin-school').value = admin.schoolId;
   }
   
-  // Set permissions
-  document.getElementById('perm-students').checked = admin.permissions.students;
-  document.getElementById('perm-transactions').checked = admin.permissions.transactions;
-  document.getElementById('perm-attendance').checked = admin.permissions.attendance;
-  document.getElementById('perm-reports').checked = admin.permissions.reports;
+  // Set permissions with safety checks
+  const permissions = admin.permissions || {};
+  document.getElementById('perm-students').checked = permissions.students || false;
+  document.getElementById('perm-transactions').checked = permissions.transactions || false;
+  document.getElementById('perm-attendance').checked = permissions.attendance || false;
+  document.getElementById('perm-reports').checked = permissions.reports || false;
   
   // Change button text and onclick
   const addBtn = document.querySelector('button[onclick="addAdminFromModal()"]');
@@ -4734,13 +4735,28 @@ async function removeAdmin(adminId) {
     return;
   }
   
+  console.log('Looking for admin with ID:', adminId);
+  console.log('All admins in data.admins:', data.admins.map((a, i) => ({
+    index: i,
+    id: a.id,
+    firebaseId: a.firebaseId,
+    userId: a.userId,
+    email: a.email,
+    name: a.name
+  })));
+  
   const admin = data.admins.find(a => 
     a.email === adminId || 
     a.userId === adminId || 
     a.firebaseId === adminId || 
     a.id === adminId
   );
+  
+  console.log('Found admin:', admin);
+  
   if (!admin) {
+    console.log('Admin not found for ID:', adminId);
+    console.log('Available admins:', data.admins.map(a => ({id: a.id, firebaseId: a.firebaseId, name: a.name})));
     alert('Administrator not found');
     return;
   }
@@ -4753,7 +4769,10 @@ async function removeAdmin(adminId) {
     
     // Remove from data using the same identifier logic
     data.admins = data.admins.filter(a => 
-      (a.email || a.userId || a.firebaseId || a.id) !== adminId
+      a.email !== adminId && 
+      a.userId !== adminId && 
+      a.firebaseId !== adminId && 
+      a.id !== adminId
     );
     
     // Remove from Firebase using the document ID
