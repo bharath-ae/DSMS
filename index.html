@@ -2798,11 +2798,39 @@ async function verifyUserRole(userId, selectedRole) {
   try {
     if (selectedRole === 'owner') {
       console.log('Checking owner role for user:', userId);
-      // Allow owner login even without existing schools
-      // Owners can create schools after logging in
-      const result = 'owner'; // Always allow owner role for initial login
-      console.log('Owner verification result:', result);
-      return result;
+      
+      // Get user email to check against owners collection
+      const user = await FirebaseService.getCurrentUser();
+      console.log('Current user object:', user);
+      const userEmail = user ? user.email : null;
+      console.log('User email for verification:', userEmail);
+      
+      if (!userEmail) {
+        console.log('Owner access denied: no email found');
+        return null;
+      }
+      
+      // Check if user email exists in owners collection
+      try {
+        console.log('Checking owners collection for document ID:', userEmail);
+        const ownerDoc = await db.collection('Owners').doc(userEmail.trim()).get();
+        console.log('Owner document exists:', ownerDoc.exists);
+        console.log('Owner document data:', ownerDoc.data());
+        
+        if (ownerDoc.exists) {
+          console.log('Owner access granted for email:', userEmail);
+          return 'owner';
+        } else {
+          console.log('Owner access denied: email not in owners list:', userEmail);
+          // Try to list all owners to debug
+          const allOwners = await db.collection('Owners').get();
+          console.log('All owners in collection:', allOwners.docs.map(doc => doc.id));
+          return null;
+        }
+      } catch (error) {
+        console.error('Error checking owners collection:', error);
+        return null;
+      }
     } else {
       console.log('Checking non-owner role:', selectedRole, 'for user:', userId);
       // Check if user is assigned as office/instructor in any school
