@@ -546,7 +546,6 @@
         <div class="form-group" style="margin-bottom:15px;">
           <label style="display:block;margin-bottom:5px;font-weight:500;color:var(--text);">Role</label>
           <select id="admin-role" class="form-control" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:6px;font-size:14px; box-sizing: border-box;">
-            <option value="owner">Owner</option>
             <option value="office">Office Admin</option>
             <option value="instructor">Instructor</option>
           </select>
@@ -2433,45 +2432,106 @@ const FirebaseService = {
   },
   
   async getUserMemberSchools(userId) {
+    // ── Strategy ──────────────────────────────────────────────────────────────
+    // We store a top-level document at /userSchools/{uid} when an admin is
+    // created. It contains { schoolIds: [...], roles: { schoolId: role } }.
+    // On login we read that single doc (user reads their own → always allowed),
+    // then do direct .get() on each school doc (allowed for members).
+    // This requires ZERO collection listing and ZERO indexes.
+    // ─────────────────────────────────────────────────────────────────────────
     try {
-      // Get schools where user is a member
       const userSchools = [];
-      const schoolsSnapshot = await this.schoolsRef.get();
-      
-      // First try to find by document ID (for backward compatibility)
-      for (const schoolDoc of schoolsSnapshot.docs) {
-        const userDoc = await schoolDoc.ref.collection('users').doc(userId).get();
-        if (userDoc.exists) {
-          userSchools.push({
-            id: schoolDoc.id,
-            ...schoolDoc.data(),
-            userRole: userDoc.data().role
-          });
-        }
+
+      // Primary path: read the user's own top-level membership index doc
+      let indexDoc;
+      try {
+        indexDoc = await db.collection('userSchools').doc(userId).get();
+      } catch (e) {
+        console.warn('Could not read /userSchools/' + userId + ':', e.message);
+        indexDoc = null;
       }
-      
-      // If no schools found by ID, try by email lookup
-      if (userSchools.length === 0 && currentUser && currentUser.email) {
-        console.log('No schools found by ID, trying email lookup for:', currentUser.email);
-        
-        for (const schoolDoc of schoolsSnapshot.docs) {
-          const usersSnapshot = await schoolDoc.ref.collection('users').get();
-          const userDoc = usersSnapshot.docs.find(doc => {
-            const userData = doc.data();
-            return userData.email === currentUser.email;
-          });
-          
-          if (userDoc) {
-            console.log('Found user by email in school:', schoolDoc.id, 'role:', userDoc.data().role);
-            userSchools.push({
-              id: schoolDoc.id,
-              ...schoolDoc.data(),
-              userRole: userDoc.data().role
-            });
+
+      if (indexDoc && indexDoc.exists) {
+        const indexData = indexDoc.data();
+        const schoolIds = indexData.schoolIds || [];
+        const roles = indexData.roles || {};
+
+        console.log('getUserMemberSchools index doc found, schools:', schoolIds);
+
+        for (const schoolId of schoolIds) {
+          try {
+            const schoolDoc = await this.schoolsRef.doc(schoolId).get();
+            if (schoolDoc.exists) {
+              const storedRole = roles[schoolId] || 'office';
+              // Normalize: treat 'admin' as 'office' to match login buttons
+              const resolvedRole = (storedRole === 'admin') ? 'office' : storedRole;
+              userSchools.push({
+                id: schoolDoc.id,
+                ...schoolDoc.data(),
+                userRole: resolvedRole
+              });
+            }
+          } catch (schoolErr) {
+            console.warn('Could not fetch school', schoolId, ':', schoolErr.message);
           }
         }
+        return userSchools;
       }
-      
+
+      // Fallback: try reading the UID-keyed user doc directly if we know the schoolId
+      // from the user's profile (stored during createSchoolWithAdmin).
+      // This covers accounts created after the UID-doc fix but before the index doc fix.
+      console.log('No /userSchools index doc found for', userId, '— trying direct UID doc fallback');
+
+      // We can't list schools, so try the collectionGroup approach as last resort
+      // (requires the index to be deployed via firestore.indexes.json)
+      try {
+        const userDocsSnap = await db
+          .collectionGroup('users')
+          .where('userId', '==', userId)
+          .get();
+
+        console.log('collectionGroup fallback hits:', userDocsSnap.size);
+
+        for (const userDoc of userDocsSnap.docs) {
+          const uData = userDoc.data();
+          const schoolId = uData.schoolId;
+          if (!schoolId) continue;
+
+          const storedRole = uData.role || uData.userRole || 'office';
+          const resolvedRole = (storedRole === 'admin') ? 'office' : storedRole;
+
+          try {
+            const schoolDoc = await this.schoolsRef.doc(schoolId).get();
+            if (schoolDoc.exists) {
+              userSchools.push({
+                id: schoolDoc.id,
+                ...schoolDoc.data(),
+                userRole: resolvedRole
+              });
+
+              // Write the index doc now so next login uses the fast path
+              try {
+                const existing = await db.collection('userSchools').doc(userId).get();
+                const existingData = existing.exists ? existing.data() : { schoolIds: [], roles: {} };
+                if (!existingData.schoolIds.includes(schoolId)) {
+                  existingData.schoolIds.push(schoolId);
+                  existingData.roles[schoolId] = resolvedRole;
+                  await db.collection('userSchools').doc(userId).set(existingData);
+                  console.log('Wrote /userSchools index doc for', userId);
+                }
+              } catch (idxErr) {
+                console.warn('Could not write index doc (non-fatal):', idxErr.message);
+              }
+            }
+          } catch (schoolErr) {
+            console.warn('Could not fetch school', schoolId, ':', schoolErr.message);
+          }
+        }
+      } catch (cgErr) {
+        console.warn('collectionGroup query failed (index may not be deployed):', cgErr.message);
+      }
+
       return userSchools;
     } catch (error) {
       console.error('Error getting user member schools:', error);
@@ -2818,6 +2878,9 @@ async function verifyUserRole(userId, selectedRole) {
         console.log('Owner document data:', ownerDoc.data());
         
         if (ownerDoc.exists) {
+          console.log('Owner found in collection, validating subscription...');
+          // Validate subscription for owner
+          await validateSubscriptionForRole(userId, userEmail, 'owner');
           console.log('Owner access granted for email:', userEmail);
           return 'owner';
         } else {
@@ -2829,6 +2892,10 @@ async function verifyUserRole(userId, selectedRole) {
         }
       } catch (error) {
         console.error('Error checking owners collection:', error);
+        // Re-throw subscription-related errors so they can be handled properly
+        if (error.message && (error.message.includes('subscription') || error.message.includes('incomplete') || error.message.includes('setup'))) {
+          throw error;
+        }
         return null;
       }
     } else {
@@ -2840,18 +2907,39 @@ async function verifyUserRole(userId, selectedRole) {
       
       // Check if user has the selected role in any school
       const hasRole = memberSchools.some(school => {
-        console.log('Checking school:', school, 'role:', school.userRole, 'selected:', selectedRole);
-        console.log('Available fields:', Object.keys(school));
-        
-        // Check the userRole field (this is set correctly in getUserMemberSchools)
-        return school.userRole === selectedRole;
+        console.log('Checking school:', school.id, '| stored userRole:', school.userRole, '| selected:', selectedRole);
+        // Match exact role, or treat 'admin' stored value as 'office'
+        const storedRole = school.userRole === 'admin' ? 'office' : school.userRole;
+        return storedRole === selectedRole;
       });
       
       console.log('Has role result:', hasRole);
-      return hasRole ? selectedRole : null;
+      
+      if (hasRole) {
+        console.log('Role found, validating subscription...');
+        // Get user email for subscription validation
+        const user = await FirebaseService.getCurrentUser();
+        const userEmail = user ? user.email : null;
+        
+        if (userEmail) {
+          // Validate subscription for staff/admin
+          await validateSubscriptionForRole(userId, userEmail, selectedRole);
+          console.log('Subscription validated for', selectedRole, ':', userEmail);
+          return selectedRole;
+        } else {
+          console.log('No email found for subscription validation');
+          return null;
+        }
+      }
+      
+      return null;
     }
   } catch (error) {
     console.error('Error verifying user role:', error);
+    // Re-throw subscription-related errors so they can be handled properly
+    if (error.message && (error.message.includes('subscription') || error.message.includes('incomplete') || error.message.includes('setup'))) {
+      throw error;
+    }
     return null;
   }
 }
@@ -2877,6 +2965,222 @@ function hasPageAccess(pageId) {
   
   return rolePermissions[currentRole].includes(pageId);
 }
+
+// Check owner subscription and show renewal message if needed
+async function checkOwnerSubscription(userEmail) {
+  try {
+    const ownerDoc = await db.collection('Owners').doc(userEmail.trim()).get();
+    if (!ownerDoc.exists) {
+      return { valid: false, message: 'You are not authorized for this role' };
+    }
+    
+    const ownerData = ownerDoc.data();
+    console.log('Owner data for subscription check:', ownerData);
+    
+    // Check if document has subscription fields
+    if (!ownerData || Object.keys(ownerData).length === 0) {
+      return { valid: false, message: 'Your subscription information is incomplete. Please contact support to complete your subscription setup.' };
+    }
+    
+    if (ownerData.subscriptionStatus !== 'active' || !ownerData.subscriptionExpiry) {
+      return { valid: false, message: 'Please renew your subscription to continue.' };
+    }
+    
+    const expiryDate = new Date(ownerData.subscriptionExpiry);
+    const currentDate = new Date();
+    
+    if (expiryDate <= currentDate) {
+      return { valid: false, message: 'Your subscription has expired. Please renew your subscription to continue.' };
+    }
+    
+    return { valid: true };
+  } catch (error) {
+    console.error('Error checking subscription:', error);
+    return { valid: false, message: 'Error checking subscription status' };
+  }
+}
+
+// Check subscription for any user (owner, staff, admin) based on their school
+async function checkUserSubscription(userId, userEmail, selectedRole) {
+  try {
+    if (selectedRole === 'owner') {
+      // For owners, check their direct subscription
+      return await checkOwnerSubscription(userEmail);
+    } else {
+      // For staff/admin, check their school's subscription (linked to owner)
+      const memberSchools = await FirebaseService.getUserMemberSchools(userId);
+      
+      if (memberSchools.length === 0) {
+        return { valid: false, message: 'You are not assigned to any school' };
+      }
+      
+      // Check subscription for the first school (all schools under same owner should have same subscription)
+      const school = memberSchools[0];
+      const schoolDoc = await db.collection('schools').doc(school.id).get();
+      
+      if (!schoolDoc.exists) {
+        return { valid: false, message: 'School not found' };
+      }
+      
+      const schoolData = schoolDoc.data();
+      const ownerEmail = schoolData.ownerEmail || schoolData.createdBy;
+      
+      if (!ownerEmail) {
+        return { valid: false, message: 'Unable to verify school subscription' };
+      }
+      
+      // Check the owner's subscription
+      const ownerSubscription = await checkOwnerSubscription(ownerEmail);
+      
+      if (!ownerSubscription.valid) {
+        return { valid: false, message: `School subscription issue: ${ownerSubscription.message}` };
+      }
+      
+      return { valid: true };
+    }
+  } catch (error) {
+    console.error('Error checking user subscription:', error);
+    return { valid: false, message: 'Error checking subscription status' };
+  }
+}
+
+// Enhanced subscription validation for all user types
+async function validateSubscriptionForRole(userId, userEmail, selectedRole) {
+  console.log(`Validating subscription for ${selectedRole}: ${userEmail}`);
+  
+  let ownerEmail = null;
+  
+  if (selectedRole === 'owner') {
+    // For owners, check their own pause status
+    ownerEmail = userEmail;
+    console.log(`User is owner, checking pause list for: ${ownerEmail}`);
+  } else {
+    // For non-owners, find their associated owner
+    console.log(`User is ${selectedRole}, finding associated owner...`);
+    try {
+      const memberSchools = await FirebaseService.getUserMemberSchools(userId);
+      console.log(`Member schools for ${userEmail}:`, memberSchools);
+      
+      if (memberSchools.length > 0) {
+        // Get the owner from the first school they belong to
+        const school = memberSchools[0];
+        ownerEmail = school.ownerEmail || school.email; // Try to get owner email from school
+        console.log(`Found associated owner for ${selectedRole}: ${ownerEmail}`);
+      } else {
+        console.log(`No schools found for ${selectedRole} ${userEmail}, skipping subscription check`);
+        return true;
+      }
+    } catch (error) {
+      console.log(`Error finding owner for ${selectedRole} ${userEmail}: ${error.message}`);
+      return true; // Allow login if we can't determine owner
+    }
+  }
+  
+  if (!ownerEmail) {
+    console.log(`No owner email found for ${selectedRole} ${userEmail}, skipping subscription check`);
+    return true;
+  }
+  
+  // Check if the owner is in pause list
+  let isOwnerOnpause = false;
+  try {
+    // Try UID-based lookup first
+    const ownerUid = userId; // Use the current user's UID
+    const onpauseDoc = await db.collection('onpause').doc(ownerUid).get();
+    isOwnerOnpause = onpauseDoc.exists;
+    console.log(`Owner UID ${ownerUid} is in pause list: ${isOwnerOnpause}`);
+    
+    // If not found by UID, try email-based lookup for backward compatibility
+    if (!isOwnerOnpause && ownerEmail) {
+      const emailOnpauseDoc = await db.collection('onpause').doc(ownerEmail).get();
+      isOwnerOnpause = emailOnpauseDoc.exists;
+      console.log(`Owner email ${ownerEmail} is in pause list: ${isOwnerOnpause}`);
+    }
+  } catch (error) {
+    console.log(`Error checking pause list for owner ${ownerEmail}: ${error.message}`);
+    // If we can't check the pause list, assume owner is NOT in pause list (allow normal login)
+    isOwnerOnpause = false;
+    console.log(`Assuming owner ${ownerEmail} is not in pause list due to permission error`);
+  }
+  
+  // Only check subscription if the owner is in the pause list
+  if (isOwnerOnpause) {
+    console.log(`Owner ${ownerEmail} is in pause list, checking subscription...`);
+    const subscriptionCheck = await checkUserSubscription(userId, ownerEmail, 'owner');
+    
+    if (!subscriptionCheck.valid) {
+      const userRoleText = selectedRole === 'owner' ? 'Your' : `Your owner's`;
+      console.log(`Subscription validation failed: ${subscriptionCheck.message}`);
+      throw new Error(`${userRoleText} subscription is incomplete. Please contact support to complete the subscription setup.`);
+    }
+    
+    console.log(`Subscription validation passed for owner in pause list: ${ownerEmail}`);
+  } else {
+    console.log(`Owner ${ownerEmail} is not in pause list - allowing normal login`);
+  }
+  
+  return true;
+}
+
+// Show subscription renewal modal
+function showSubscriptionRenewal(message, selectedRole = null) {
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+    background: rgba(0,0,0,0.5); display: flex; align-items: center; 
+    justify-content: center; z-index: 10000;
+  `;
+  
+  modal.innerHTML = `
+    <div style="background: white; padding: 40px; border-radius: 15px; max-width: 450px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+      <div style="width: 60px; height: 60px; background: #fef3c7; border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
+        <svg width="30" height="30" fill="#f59e0b" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+        </svg>
+      </div>
+      <h3 style="color: #333; margin-bottom: 15px; font-size: 24px;">Subscription Required</h3>
+      <p style="color: #666; margin-bottom: 25px; line-height: 1.5;">${message}</p>
+      
+      <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 25px; text-align: left;">
+        <p style="color: #475569; margin: 0; font-size: 14px;"><strong>Next steps:</strong></p>
+        <ul style="color: #64748b; margin: 8px 0 0 20px; font-size: 13px;">
+          <li>Contact your administrator</li>
+          <li>Renew your subscription plan</li>
+          <li>Check your payment status</li>
+        </ul>
+      </div>
+      
+      <div style="display: flex; justify-content: center;">
+        <button onclick="this.closest('div').parentElement.remove()" style="background: #3b82f6; color: white; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;">OK</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  
+  // Check if user is in onpause collection and update modal buttons
+  const userId = currentUser ? currentUser.uid : null;
+  if (userId) {
+    updateModalForOnpauseUsers(userId, selectedRole);
+  }
+}
+
+// Check if user is owner and in pause list, then update modal accordingly
+async function updateModalForOnpauseUsers(userId, selectedRole) {
+  // Find the modal and update to show only OK button
+  const modal = document.querySelector('[style*="position: fixed"]');
+  if (modal) {
+    const buttonContainer = modal.querySelector('div[style*="display: flex"]');
+    if (buttonContainer) {
+      // Always show only OK button for all users
+      buttonContainer.innerHTML = `
+        <button onclick="this.closest('div').parentElement.remove()" style="background: #3b82f6; color: white; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;">OK</button>
+      `;
+    }
+  }
+}
+
+
 
 // Check if user has permission to perform an action
 function hasActionPermission(action, data = {}) {
@@ -3113,6 +3417,9 @@ async function doLogin() {
     
   } catch (error) {
     console.error('Login error:', error);
+    console.log('Error message:', error.message);
+    console.log('Error includes subscription keywords:', error.message && (error.message.includes('subscription') || error.message.includes('incomplete') || error.message.includes('setup')));
+    
     let errorMessage = 'Login failed. Please try again.';
     
     if (error.code === 'auth/user-not-found') {
@@ -3123,11 +3430,20 @@ async function doLogin() {
       errorMessage = 'Invalid email address.';
     } else if (error.code === 'auth/too-many-requests') {
       errorMessage = 'Too many failed attempts. Please try again later.';
+    } else if (error.message && (error.message.includes('subscription') || error.message.includes('incomplete') || error.message.includes('setup'))) {
+      // Show subscription renewal modal for subscription-related errors
+      const activeRole = document.querySelector('.role-btn.active');
+      const selectedRole = activeRole ? activeRole.id.replace('role-', '') : 'owner';
+      showSubscriptionRenewal(error.message, selectedRole);
+      // Reset login button
+      const loginBtn = document.querySelector('.btn-login');
+      loginBtn.textContent = originalText;
+      loginBtn.disabled = false;
+      return; // Don't show generic error
     } else if (error.message) {
       errorMessage = error.message;
+      alert(errorMessage);
     }
-    
-    alert(errorMessage);
     const loginBtn = document.querySelector('.btn-login');
     loginBtn.textContent = originalText;
     loginBtn.disabled = false;
@@ -3945,6 +4261,13 @@ function closeCreateSchoolWithManagerModal() {
   document.getElementById('modal-create-school-with-manager').style.display = 'none';
 }
 
+function closeCreateSchoolWithAdminModal() {
+  const modal = document.getElementById('modal-create-school-with-admin');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
 // Password Reset Modal Functions
 function openPasswordResetModal() {
   const modal = document.getElementById('modal-password-reset');
@@ -4196,6 +4519,9 @@ async function createSchoolWithAdmin() {
   }
   
   try {
+    // Preserve original owner UID before creating admin
+    const originalOwnerUid = currentUser.uid;
+    
     // Create school
     const schoolData = {
       name: schoolName,
@@ -4203,7 +4529,7 @@ async function createSchoolWithAdmin() {
       phone: schoolPhone,
       latitude: parseFloat(schoolLatitude),
       longitude: parseFloat(schoolLongitude),
-      ownerId: currentUser.uid,
+      ownerId: originalOwnerUid,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       status: 'active'
@@ -4211,21 +4537,43 @@ async function createSchoolWithAdmin() {
     
     const school = await FirebaseService.createSchool(schoolData);
     
-    let userCredential;
+    // ── Create admin account using a SECONDARY Firebase app instance ──────────
+    // This prevents Firebase from switching the active session away from the owner.
+    // If we used FirebaseService.signUp() directly, Firebase would automatically
+    // sign in the new admin, losing the owner's auth token and causing all
+    // subsequent Firestore writes to fail with "Missing or insufficient permissions".
+    let adminUid;
     try {
-      // Try to create new admin user account with Firebase Auth
-      userCredential = await FirebaseService.signUp(adminEmail, adminPassword);
+      // Reuse secondary app if it already exists (e.g. from a previous call),
+      // otherwise initialise it with the same config as the primary app.
+      const secondaryApp =
+        firebase.apps.find(a => a.name === 'secondary') ||
+        firebase.initializeApp(firebase.app().options, 'secondary');
+      const secondaryAuth = secondaryApp.auth();
+
+      const secondaryCredential = await secondaryAuth
+        .createUserWithEmailAndPassword(adminEmail, adminPassword);
+      adminUid = secondaryCredential.user.uid;
+
+      // Sign out of the secondary app immediately — we only needed the UID.
+      await secondaryAuth.signOut();
+      console.log('Admin account created via secondary app, UID:', adminUid);
+
     } catch (signUpError) {
       if (signUpError.code === 'auth/email-already-in-use') {
-        // User already exists, sign them in instead
-        console.log('User already exists, signing in...');
-        userCredential = await FirebaseService.signIn(adminEmail, adminPassword);
-        addNotification('Existing user account found and signed in.', 'info');
+        // Account already exists. We can't look up a UID client-side via email
+        // (that requires the Admin SDK), so we store the email as a reference.
+        // The admin can still log in — their UID will be resolved on first sign-in.
+        console.log('Admin email already in use — linking existing account by email');
+        adminUid = adminEmail; // placeholder; resolved on first admin login
+        addNotification('Existing user account found and linked.', 'info');
       } else {
         throw signUpError;
       }
     }
-    
+    // Owner session is still intact — auth.currentUser is still the owner.
+    // ──────────────────────────────────────────────────────────────────────────
+
     // Get permissions
     const permissions = {
       students: document.getElementById('perm-students').checked,
@@ -4234,27 +4582,62 @@ async function createSchoolWithAdmin() {
       reports: document.getElementById('perm-reports').checked
     };
     
-    // Create admin data with same structure as addAdminFromModal
+    // Normalize role: must be 'office' or 'instructor' to match login role buttons
+    const normalizedRole = (adminRole === 'admin' || adminRole === 'office') ? 'office' : 'instructor';
+
+    // Create admin data with consistent role fields
     const adminData = {
-      id: 1, // First admin for this school
       name: adminName,
       email: adminEmail,
-      password: adminPassword, // Store password (in production, this should be hashed)
-      role: adminRole,
+      password: adminPassword,
+      role: normalizedRole,       // used by getUserMemberSchools for role lookup
+      userRole: normalizedRole,   // kept for display/compatibility
       phone: adminPhone,
       status: 'active',
       addedOn: new Date().toISOString().split('T')[0],
       permissions: permissions,
       schoolId: school.id,
-      userRole: adminRole,
-      firebaseId: userCredential.uid
+      userId: adminUid,
+      firebaseId: adminUid,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
-    
-    // Add admin to school with full structure
-    await FirebaseService.addDocument(
-      FirebaseService.schoolsRef.doc(school.id).collection('users'),
-      adminData
-    );
+
+    // Save admin user doc with their Firebase UID as the document ID.
+    // This is CRITICAL — Firestore rules use:
+    //   exists(/databases/.../schools/{schoolId}/users/{request.auth.uid})
+    // so the doc ID must equal the admin's UID for isSchoolMember() to return true.
+    if (adminUid && adminUid !== adminEmail) {
+      // Normal case: we have the real UID from the secondary app
+      await FirebaseService.schoolsRef
+        .doc(school.id)
+        .collection('users')
+        .doc(adminUid)
+        .set(adminData);
+
+      // Also write a top-level /userSchools/{uid} index document.
+      // getUserMemberSchools() reads this first — it needs NO index and NO
+      // collection-listing permission, just a direct doc read by the user themselves.
+      await db.collection('userSchools').doc(adminUid).set({
+        schoolIds: firebase.firestore.FieldValue.arrayUnion(school.id),
+        roles: { [school.id]: normalizedRole },
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+
+    } else {
+      // Fallback: email already existed, UID unknown client-side.
+      // Save by email as a temporary placeholder — admin must contact owner
+      // to have their UID-based doc created after first login.
+      await FirebaseService.schoolsRef
+        .doc(school.id)
+        .collection('users')
+        .doc(adminEmail.replace(/[.#$\/\[\]]/g, '_'))
+        .set({ ...adminData, pendingUidResolution: true });
+      addNotification('⚠️ Admin email already existed. Ask the admin to log in once and contact you — their access needs a one-time fix.', 'warning');
+    }
+
+    // Confirm owner session is current (should be unchanged, but defensive)
+    currentUser = auth.currentUser;
     
     // Update user schools list
     await loadUserSchools();
@@ -6561,38 +6944,78 @@ async function addAdminFromModal() {
       reports: document.getElementById('perm-reports').checked
     };
     
+    // Normalize role to match login buttons
+    const normalizedRole = (role === 'admin') ? 'office' : role;
+
     // Create admin data
     const adminData = {
-      id: data.admins.length + 1,
       name,
       email,
-      password: password, // Store password (in production, this should be hashed)
-      role, // Explicitly set role from form
+      password,
+      role: normalizedRole,
+      userRole: normalizedRole,
       phone,
       status: 'active',
       addedOn: new Date().toISOString().split('T')[0],
       permissions,
       schoolId: schoolId,
-      userRole: role // Also set userRole field for consistency
+      userId: null,      // filled in below once we have the UID
+      firebaseId: null
     };
-    
-    // Add to data
+
+    // Create the Firebase Auth account via a secondary app so the owner
+    // session is not disrupted
+    let adminUid = null;
+    try {
+      const secondaryApp =
+        firebase.apps.find(a => a.name === 'secondary') ||
+        firebase.initializeApp(firebase.app().options, 'secondary');
+      const secondaryAuth = secondaryApp.auth();
+      const cred = await secondaryAuth.createUserWithEmailAndPassword(email, password);
+      adminUid = cred.user.uid;
+      await secondaryAuth.signOut();
+      console.log('Admin Firebase Auth account created, UID:', adminUid);
+    } catch (authErr) {
+      if (authErr.code === 'auth/email-already-in-use') {
+        addNotification('This email already has a Firebase account. The admin can log in but may need the owner to fix their access doc.', 'warning');
+        // We don't know the UID client-side; skip UID-based write
+      } else {
+        throw authErr;
+      }
+    }
+
+    adminData.userId = adminUid;
+    adminData.firebaseId = adminUid;
+
+    // Add to local list
     data.admins.push(adminData);
-    
-    // Save to Firebase (in real implementation)
+
+    // Save to Firebase — use UID as doc ID so isSchoolMember() rule works
     if (schoolId) {
-      console.log('Saving admin to Firebase:', adminData);
-      console.log('Admin data structure:', JSON.stringify(adminData, null, 2));
-      try {
-        const docRef = await FirebaseService.addDocument(
+      if (adminUid) {
+        // Write membership doc with UID as document ID
+        await FirebaseService.schoolsRef
+          .doc(schoolId)
+          .collection('users')
+          .doc(adminUid)
+          .set(adminData);
+
+        // Write /userSchools/{uid} index so getUserMemberSchools() can do a
+        // direct read without listing schools (no permissions issue, no index needed)
+        await db.collection('userSchools').doc(adminUid).set({
+          schoolIds: firebase.firestore.FieldValue.arrayUnion(schoolId),
+          roles: { [schoolId]: normalizedRole },
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+
+        console.log('Admin saved with UID doc ID and userSchools index written');
+      } else {
+        // Fallback: no UID available, save with auto-ID (limited functionality)
+        await FirebaseService.addDocument(
           FirebaseService.schoolsRef.doc(schoolId).collection('users'),
           adminData
         );
-        console.log('Admin saved successfully to Firebase');
-        console.log('Returned document ID:', docRef.id);
-      } catch (error) {
-        console.error('Error saving admin to Firebase:', error);
-        alert('Error saving administrator to database. Please try again.');
+        console.warn('Admin saved with auto-ID — login may not work until UID doc is created');
       }
     }
     
