@@ -747,7 +747,7 @@
           </div>
         </div>
         
-                <div class="stats-grid">
+                <div class="stats-grid" id="dashboard-stats-grid">
           <div class="stat-card accent"><div class="sc-label">Total Students</div><div class="sc-value" style="color:var(--primary)">0</div><div class="sc-sub">Total enrolled</div></div>
           <div class="stat-card blue"><div class="sc-label">Active Learners</div><div class="sc-value" style="color:var(--accent2)">0</div><div class="sc-sub">Currently learning</div></div>
           <div class="stat-card green"><div class="sc-label">Today's Income</div><div class="sc-value" style="color:var(--success)">₹0</div><div class="sc-sub">Fees collected</div></div>
@@ -779,7 +779,15 @@
         </div>
         <div class="two-col">
           <div class="card">
-            <div class="card-title">Today's Attendance <span class="badge badge-blue" id="att-count">Loading...</span></div>
+            <div class="card-title">Today's Attendance <span class="badge badge-blue" id="att-count">Loading...</span>
+              <span id="att-today-date" style="font-size:12px;color:var(--text2);font-weight:normal;"></span>
+            </div>
+            <div class="stats-grid" style="margin-bottom:16px;">
+              <div class="stat-card"><div class="sc-label">Present Today</div><div class="sc-value" id="quick-att-today">0</div><div class="sc-sub">Students</div></div>
+              <div class="stat-card"><div class="sc-label">Attendance Rate</div><div class="sc-value" id="quick-att-rate">0%</div><div class="sc-sub">Today</div></div>
+              <div class="stat-card"><div class="sc-label">Weekly Avg</div><div class="sc-value" id="quick-att-week">0</div><div class="sc-sub">This week</div></div>
+              <div class="stat-card"><div class="sc-label">Monthly Avg</div><div class="sc-value" id="quick-att-month">0</div><div class="sc-sub">This month</div></div>
+            </div>
             <div id="dash-attendance"></div>
           </div>
           <div class="card">
@@ -911,115 +919,221 @@
       </div>
 
       <!-- INSTRUCTOR PAGES -->
-      <div class="page" id="page-my-students">
+      <!-- ============================================================ -->
+      <!-- PAGE 1: MY ATTENDANCE (Self-marking) — UPDATED               -->
+      <!-- ============================================================ -->
+      <div class="page active" id="page-attendance">
         <div class="page-header">
-          <div><h2>My Students</h2><p>Students assigned to you</p></div>
-        </div>
-        <div id="instructor-students-list"></div>
-      </div>
-
-      <div class="page" id="page-class-schedule">
-        <div class="page-header">
-          <div><h2>Class Schedule</h2><p>Weekly driving class timetable</p></div>
-          <button class="btn btn-accent" data-action="add_schedule" onclick="openModal('modal-add-class')">+ Add Slot</button>
-        </div>
-        <div class="card">
-          <div class="schedule-grid" id="schedule-grid"></div>
-        </div>
-      </div>
-
-      <div class="page" id="page-attendance">
-        <div class="page-header">
-          <div><h2>📊 Attendance Overview</h2><p>Use Attendance Management in Fleet Management for detailed attendance tracking</p></div>
-          <div id="att-today-date" style="color:var(--text2);font-size:13px;padding:8px 14px;background:white;border:1px solid var(--border);border-radius:8px;"></div>
-        </div>
-        
-        <!-- Quick Stats -->
-        <div class="stats-grid">
-          <div class="stat-card accent">
-            <div class="sc-label">Today's Attendance</div>
-            <div class="sc-value" style="color:var(--primary)" id="quick-att-today">0</div>
-            <div class="sc-sub">Total Present</div>
+          <div>
+            <h2>✅ My Attendance</h2>
+            <p id="att-date-display">Today — Tuesday, 13 May 2025</p>
           </div>
-          <div class="stat-card blue">
-            <div class="sc-label">This Week</div>
-            <div class="sc-value" style="color:var(--accent2)" id="quick-att-week">0</div>
-            <div class="sc-sub">Average Present</div>
-          </div>
-          <div class="stat-card green">
-            <div class="sc-label">This Month</div>
-            <div class="sc-value" style="color:var(--success)" id="quick-att-month">0</div>
-            <div class="sc-sub">Average Present</div>
-          </div>
-          <div class="stat-card">
-            <div class="sc-label">Attendance Rate</div>
-            <div class="sc-value" id="quick-att-rate">0%</div>
-            <div class="sc-sub">Overall</div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <span class="new-badge">Updated</span>
+            <button class="btn btn-accent" onclick="openSelfAttModal()" id="mark-self-btn">📍 Mark My Attendance</button>
           </div>
         </div>
 
-        <!-- Quick Actions -->
-        <div class="card">
-          <div class="card-title">Quick Actions</div>
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
-            <button class="btn btn-primary" onclick="navigateTo('owner-attendance')" style="padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px;">
-              <span style="font-size: 24px;">📊</span>
-              <span>Attendance Management</span>
-              <span style="font-size: 11px; color: var(--text2);">Detailed attendance tracking</span>
-            </button>
-            <button class="btn btn-success" onclick="openSelfAttendanceModal()" style="padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px;">
-              <span style="font-size: 24px;">✅</span>
-              <span>Mark My Attendance</span>
-              <span style="font-size: 11px; color: var(--text2);">Location-based attendance</span>
-            </button>
-            <button class="btn btn-accent" onclick="navigateTo('reports')" style="padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px;">
-              <span style="font-size: 24px;">📈</span>
-              <span>Reports</span>
-              <span style="font-size: 11px; color: var(--text2);">View attendance reports</span>
-            </button>
+        <!-- Self Attendance Status Banner -->
+        <div class="self-att-banner" id="self-att-banner">
+          <div style="font-size:48px;">👨‍🏫</div>
+          <div class="self-att-status">
+            <h3 id="self-att-msg">Mark Your Attendance to Begin</h3>
+            <p id="self-att-sub">You haven't marked attendance for today yet. Click the button to mark yourself present.</p>
+          </div>
+          <div id="self-att-time-block" style="text-align:right;display:none;">
+            <div style="font-size:11px;opacity:0.6;margin-bottom:4px;">Marked at</div>
+            <div id="self-att-time" style="font-family:'Syne';font-size:22px;font-weight:700;color:var(--accent);">—</div>
           </div>
         </div>
 
-        <!-- Recent Activity -->
-        <div class="card">
-          <div class="card-title">Recent Attendance Activity</div>
-          <div id="recent-activity" style="max-height: 300px; overflow-y: auto;">
-            <div style="text-align: center; padding: 40px; color: var(--text2);">
-              <div style="font-size: 24px; margin-bottom: 8px;">📊</div>
-              <div>Loading recent activity...</div>
+        <!-- Step Flow (shows next steps after marking self) -->
+        <div class="card" id="next-steps-card" style="display:none;">
+          <div class="card-title">📋 Today's Workflow <span class="new-badge">New</span></div>
+          <div class="step-flow" id="step-flow">
+            <div class="step-item">
+              <div class="step-circle done" id="step1">✓</div>
+              <span class="step-label">Mark My Attendance</span>
+            </div>
+            <div class="step-connector done"></div>
+            <div class="step-item">
+              <div class="step-circle active" id="step2">2</div>
+              <span class="step-label">View Schedule</span>
+            </div>
+            <div class="step-connector" id="conn2"></div>
+            <div class="step-item">
+              <div class="step-circle" id="step3">3</div>
+              <span class="step-label">Mark Students</span>
+            </div>
+            <div class="step-connector" id="conn3"></div>
+            <div class="step-item">
+              <div class="step-circle" id="step4">4</div>
+              <span class="step-label">Log Fuel</span>
             </div>
           </div>
-        </div>
-      </div>
-
-      <!-- ADMIN MANAGEMENT PAGE -->
-      <div class="page" id="page-admin-management">
-        <div class="page-header">
-          <div><h2>Admin Management</h2><p>Manage school administrators and office staff</p></div>
-          <div class="flex gap-10">
-            <button class="btn btn-danger" onclick="clearAllAdminsFromFirebase()">Clear All Admins</button>
-            <button class="btn btn-accent" data-action="add_admin" onclick="openAdminModal()">+ Add Admin</button>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="showPage('page-class-schedule');completeStep(2);">📅 View Today's Schedule</button>
+            <button class="btn btn-success" onclick="showPage('page-student-attendance');completeStep(3);">👥 Mark Student Attendance</button>
+            <button class="btn btn-outline" onclick="showPage('page-petrol')">⛽ Log Fuel</button>
           </div>
         </div>
+
+        <!-- Attendance History -->
         <div class="card">
-          <div class="card-title">School Administrators</div>
-          <div id="admins-table-container">
+          <div class="card-title">📊 My Attendance History (This Month)</div>
+          <div class="stats-grid" style="margin-bottom:0;">
+            <div class="stat-card accent"><div class="sc-label">Days Present</div><div class="sc-value" style="color:var(--primary)" id="stat-days-present">—</div><div class="sc-sub">This month</div></div>
+            <div class="stat-card red"><div class="sc-label">Days Absent</div><div class="sc-value" style="color:var(--danger)" id="stat-days-absent">—</div><div class="sc-sub">This month</div></div>
+            <div class="stat-card green"><div class="sc-label">Attendance Rate</div><div class="sc-value" style="color:var(--success)" id="stat-att-rate">—</div><div class="sc-sub">This month</div></div>
+            <div class="stat-card blue"><div class="sc-label">On Time</div><div class="sc-value" style="color:var(--accent2)" id="stat-on-time">—</div><div class="sc-sub">Punctual days</div></div>
+          </div>
+          <div style="margin-top:18px;">
             <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                  <th>Added On</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="admins-table">
-                <!-- Admins will be populated here -->
+              <thead><tr><th>Date</th><th>Check-In</th><th>Status</th><th>Location</th><th>Note</th></tr></thead>
+              <tbody id="att-history-body">
+                <tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text2);">No attendance records yet. Mark your attendance to begin.</td></tr>
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- PAGE 2: CLASS SCHEDULE — UPDATED (with reschedule reason)    -->
+      <!-- ============================================================ -->
+      <div class="page" id="page-class-schedule">
+        <div class="page-header">
+          <div>
+            <h2>📅 Today's Class Schedule</h2>
+            <p id="schedule-date-display">Loading schedule...</p>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <span class="new-badge">Updated</span>
+            <button class="btn btn-outline btn-sm" onclick="showPage('page-student-attendance');completeStep(3);">👥 Mark Students →</button>
+          </div>
+        </div>
+
+        <div class="alert-info">📋 After reviewing your schedule, proceed to <strong>Student Attendance</strong> to mark each student. For rescheduled classes, a reason is required.</div>
+
+        <!-- Schedule List -->
+        <div class="card">
+          <div class="card-title">Today's Classes <span class="badge badge-gray" id="schedule-count-badge">0 Total</span></div>
+          <div class="schedule-list" id="schedule-list">
+            <div style="text-align:center;padding:40px;color:var(--text2);">
+              <div style="font-size:32px;margin-bottom:10px;">📅</div>
+              <div>No classes scheduled for today.</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align:right;">
+          <button class="btn btn-success" onclick="showPage('page-student-attendance');completeStep(3);">👥 Proceed to Mark Student Attendance →</button>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- PAGE 3: STUDENT ATTENDANCE — NEW                             -->
+      <!-- ============================================================ -->
+      <div class="page" id="page-student-attendance">
+        <div class="page-header">
+          <div>
+            <h2>👥 Student Attendance</h2>
+            <p id="student-att-date-display">Mark attendance for your students</p>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <span class="new-badge">New</span>
+            <button class="btn btn-accent" onclick="saveStudentAttendance()" id="save-att-btn">💾 Save Attendance</button>
+          </div>
+        </div>
+
+        <div class="alert-info">✅ Mark attendance for each student from today's scheduled classes. Click a card to toggle between <strong>Present / Absent / Late</strong>. Save when done.</div>
+
+        <!-- Summary bar -->
+        <div class="stats-grid">
+          <div class="stat-card green"><div class="sc-label">Present</div><div class="sc-value" style="color:var(--success)" id="att-present-count">0</div><div class="sc-sub">Marked</div></div>
+          <div class="stat-card red"><div class="sc-label">Absent</div><div class="sc-value" style="color:var(--danger)" id="att-absent-count">0</div><div class="sc-sub">Marked</div></div>
+          <div class="stat-card accent"><div class="sc-label">Late</div><div class="sc-value" style="color:var(--warning)" id="att-late-count">0</div><div class="sc-sub">Marked</div></div>
+          <div class="stat-card"><div class="sc-label">Not Marked</div><div class="sc-value" id="att-pending-count">0</div><div class="sc-sub">Pending</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Today's Students <span class="badge badge-gray" id="student-att-count-badge">0 Students</span></div>
+          <p style="font-size:12px;color:var(--text2);margin-bottom:16px;">Click card once = <span class="badge badge-green">Present</span> &nbsp; Twice = <span class="badge badge-amber">Late</span> &nbsp; Three times = <span class="badge badge-red">Absent</span> &nbsp; Four times = reset</p>
+          <div class="att-grid" id="student-att-grid">
+            <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text2);">
+              <div style="font-size:32px;margin-bottom:10px;">👥</div>
+              <div>No students scheduled for today.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Previous attendance log -->
+        <div class="card">
+          <div class="card-title">📋 Recent Attendance Log</div>
+          <table class="data-table">
+            <thead><tr><th>Date</th><th>Student</th><th>Status</th><th>Class #</th><th>Notes</th></tr></thead>
+            <tbody id="student-att-log-body">
+              <tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text2);">No attendance records yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- PAGE 4: PETROL LOG — UPDATED (odometer before/after, money+litres) -->
+      <!-- ============================================================ -->
+      <div class="page" id="page-petrol">
+        <div class="page-header">
+          <div>
+            <h2>⛽ My Fuel Log</h2>
+            <p>Record fuel fills for your assigned vehicle</p>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <span class="new-badge">Updated</span>
+            <button class="btn btn-accent" onclick="openFuelModal()">+ Log Fuel Fill</button>
+          </div>
+        </div>
+
+        <!-- Vehicle banner -->
+        <div style="background:linear-gradient(135deg,var(--primary),#243459);color:white;border-radius:var(--radius-lg);padding:20px 24px;margin-bottom:20px;display:flex;align-items:center;gap:20px;">
+          <div style="font-size:40px;">🚗</div>
+          <div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Your Assigned Vehicle</div>
+            <div id="fuel-vehicle-name" style="font-family:'Syne';font-size:18px;font-weight:700;">No vehicle assigned</div>
+            <div id="fuel-vehicle-reg" style="font-size:13px;color:rgba(255,255,255,0.65);margin-top:2px;">Contact office to get a vehicle assigned</div>
+          </div>
+          <div style="margin-left:auto;text-align:right;">
+            <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px;">This Month Fuel Cost</div>
+            <div id="fuel-month-cost" style="font-family:'Syne';font-size:24px;font-weight:700;color:var(--accent);">₹0</div>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card accent"><div class="sc-label">My Fuel (This Month)</div><div class="sc-value" style="color:var(--primary)" id="fuel-stat-cost">₹0</div><div class="sc-sub">Total spent</div></div>
+          <div class="stat-card"><div class="sc-label">Total Fills</div><div class="sc-value" id="fuel-stat-fills">0</div><div class="sc-sub">Entries logged</div></div>
+          <div class="stat-card blue"><div class="sc-label">Total Litres</div><div class="sc-value" style="color:var(--accent2)" id="fuel-stat-litres">0L</div><div class="sc-sub">Refueled this month</div></div>
+          <div class="stat-card green"><div class="sc-label">Distance Covered</div><div class="sc-value" style="color:var(--success)" id="fuel-stat-km">0</div><div class="sc-sub">km this month</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">My Fuel History <span class="new-badge">Odometer Tracking Added</span></div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Vehicle</th>
+                <th>Odo Before (km)</th>
+                <th>Odo After (km)</th>
+                <th>Litres (L)</th>
+                <th>Amount (₹)</th>
+                <th>₹/Litre</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="fuel-history-tbody">
+              <tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text2);">No fuel entries yet. Click "+ Log Fuel Fill" to add one.</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -1028,6 +1142,7 @@
         <div class="page-header">
           <div><h2>Staff Management</h2><p>Manage school staff members and instructors</p></div>
           <div class="flex gap-10">
+            <button class="btn btn-outline btn-sm" onclick="repairStaffLoginAccess()" title="Fix login for staff who cannot sign in">🔧 Fix Login Access</button>
             <button class="btn btn-danger" onclick="clearAllStaffFromFirebase()">Clear All Staff</button>
             <button class="btn btn-accent" data-action="add_staff" onclick="openStaffModal()">+ Add Staff</button>
           </div>
@@ -1056,53 +1171,486 @@
         </div>
       </div>
 
-      <!-- INSTRUCTOR FUEL PAGE (for driver/instructor role) -->
-      <div class="page" id="page-petrol">
+      <!-- ADMIN MANAGEMENT PAGE -->
+      <div class="page" id="page-admin-management">
         <div class="page-header">
-          <div><h2>⛽ My Fuel Log</h2><p>Record fuel fills for your assigned vehicle</p></div>
-          <button class="btn btn-accent" data-action="add_fuel_entry" onclick="openDriverFuelModal()">+ Log Fuel Fill</button>
-        </div>
-
-        <!-- My vehicle info banner -->
-        <div id="driver-vehicle-banner" style="background:linear-gradient(135deg,var(--primary),#243459);color:white;border-radius:var(--radius-lg);padding:20px 24px;margin-bottom:20px;display:flex;align-items:center;gap:20px;">
-          <div style="font-size:40px;">🚗</div>
-          <div>
-            <div style="font-size:11px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Your Assigned Vehicle</div>
-            <div id="driver-vehicle-name" style="font-family:'Syne';font-size:18px;font-weight:700;">Loading...</div>
-            <div id="driver-vehicle-reg" style="font-size:13px;color:rgba(255,255,255,0.65);margin-top:2px;"></div>
-          </div>
-          <div style="margin-left:auto;text-align:right;">
-            <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px;">This Month Fuel Cost</div>
-            <div id="driver-month-fuel" style="font-family:'Syne';font-size:24px;font-weight:700;color:var(--accent);">₹0</div>
+          <div><h2>Admin Management</h2><p>Manage school administrators</p></div>
+          <div class="flex gap-10">
+            <button class="btn btn-danger" onclick="clearAllAdminsFromFirebase()">Clear All Admins</button>
+            <button class="btn btn-accent" data-action="add_admin" onclick="openModal('modal-add-admin')">+ Add Admin</button>
           </div>
         </div>
-
-        <div class="stats-grid">
-          <div class="stat-card accent"><div class="sc-label">My Fuel (This Month)</div><div class="sc-value" style="color:var(--primary)" id="driver-fuel-month">₹0</div><div class="sc-sub">Total spent</div></div>
-          <div class="stat-card"><div class="sc-label">Total Fills</div><div class="sc-value" id="driver-fuel-fills">0</div><div class="sc-sub">Entries logged</div></div>
-          <div class="stat-card blue"><div class="sc-label">KM This Month</div><div class="sc-value" style="color:var(--accent2)" id="driver-fuel-km">0</div><div class="sc-sub">Odometer driven</div></div>
-        </div>
-
         <div class="card">
-          <div class="card-title">My Fuel History</div>
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Vehicle</th>
-                <th>Litres</th>
-                <th>Cost (₹)</th>
-                <th>KM Reading</th>
-                <th>Notes</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody id="driver-fuel-table">
-              <tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text2);">No fuel entries yet. Click "+ Log Fuel Fill" to add one.</td></tr>
-            </tbody>
-          </table>
+          <div class="card-title">School Administrators</div>
+          <div id="admins-table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="admins-table">
+                <!-- Admins will be populated here -->
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
+
+      <!-- ============================================================ -->
+      <!-- MODAL: SELF ATTENDANCE                                        -->
+      <!-- ============================================================ -->
+      <div class="modal-overlay" id="modal-self-att">
+        <div class="modal">
+          <div class="modal-header">
+            <h3>📍 Mark My Attendance</h3>
+            <button class="modal-close" onclick="closeModal('modal-self-att')">✕</button>
+          </div>
+          <div class="alert-success">✅ Your attendance will be logged with today's date and time.</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Date</label>
+              <input type="date" id="self-att-date" readonly style="background:#f8fafc;">
+            </div>
+            <div class="form-group">
+              <label>Status *</label>
+              <select id="self-att-status">
+                <option value="present">✅ Present</option>
+                <option value="late">⏰ Late</option>
+              </select>
+            </div>
+            <div class="form-group full">
+              <label>Check-In Time *</label>
+              <input type="time" id="self-att-check-in" value="08:45">
+            </div>
+            <div class="form-group full">
+              <label>Location / Note (optional)</label>
+              <input type="text" id="self-att-location" placeholder="e.g. DrivePro HQ, Koramangala">
+            </div>
+          </div>
+
+          <div style="margin-top:20px;padding:14px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);text-align:center;">
+            <div style="font-size:20px;margin-bottom:6px;">🌐</div>
+            <div style="font-size:13px;font-weight:500;">Auto-detecting Location...</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:4px;">DrivePro HQ, Koramangala, Bengaluru</div>
+          </div>
+
+          <div style="margin-top:20px;display:flex;gap:10px;">
+            <button class="btn btn-success" onclick="markSelfPresent()" style="flex:1;">✅ Confirm Attendance</button>
+            <button class="btn btn-outline" onclick="closeModal('modal-self-att')">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- MODAL: RESCHEDULE CLASS — NEW (requires reason)             -->
+      <!-- ============================================================ -->
+      <div class="modal-overlay" id="modal-reschedule">
+        <div class="modal">
+          <div class="modal-header">
+            <h3>⚠ Reschedule Class</h3>
+            <button class="modal-close" onclick="closeModal('modal-reschedule')">✕</button>
+          </div>
+          <div class="alert-warning">⚠ Rescheduling requires a valid reason. The owner and student will be notified.</div>
+          <div style="background:var(--surface2);border-radius:10px;padding:14px 16px;margin-bottom:18px;border:1px solid var(--border);">
+            <div style="font-size:12px;color:var(--text2);">Class for</div>
+            <div style="font-size:16px;font-weight:600;color:var(--text);margin-top:4px;" id="reschedule-student-name">—</div>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Original Date</label>
+              <input type="date" id="reschedule-orig-date" value="2025-05-13" readonly style="background:#f8fafc;">
+            </div>
+            <div class="form-group">
+              <label>New Date *</label>
+              <input type="date" id="reschedule-new-date" value="2025-05-14">
+            </div>
+            <div class="form-group">
+              <label>Original Time</label>
+              <input type="time" id="reschedule-orig-time" value="13:00" readonly style="background:#f8fafc;">
+            </div>
+            <div class="form-group">
+              <label>New Time *</label>
+              <input type="time" id="reschedule-new-time" value="14:00">
+            </div>
+            <div class="form-group full">
+              <label>Reason for Reschedule * <span style="color:var(--danger);">(Required)</span></label>
+              <select id="reschedule-reason-type" onchange="toggleReasonField()" style="margin-bottom:8px;">
+                <option value="">— Select a reason —</option>
+                <option value="student-request">Student requested reschedule</option>
+                <option value="instructor-sick">Instructor sick / unwell</option>
+                <option value="vehicle-breakdown">Vehicle breakdown</option>
+                <option value="weather">Bad weather / safety concern</option>
+                <option value="ground-unavailable">Training ground unavailable</option>
+                <option value="emergency">Personal emergency</option>
+                <option value="other">Other (specify below)</option>
+              </select>
+              <textarea id="reschedule-reason-detail" placeholder="Provide additional details about the reschedule reason..." style="min-height:80px;" required></textarea>
+            </div>
+            <div class="form-group full">
+              <label>Notify Student? </label>
+              <select id="reschedule-notify">
+                <option value="yes">Yes — Send SMS/Notification to student</option>
+                <option value="no">No — I will inform the student directly</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-top:20px;display:flex;gap:10px;">
+            <button class="btn btn-warning" onclick="saveReschedule()" style="flex:1;">⚠ Confirm Reschedule</button>
+            <button class="btn btn-outline" onclick="closeModal('modal-reschedule')">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- MODAL: FUEL LOG — UPDATED (odo before, litres, money)       -->
+      <!-- ============================================================ -->
+      <div class="modal-overlay" id="modal-fuel">
+        <div class="modal" style="width:600px;">
+          <div class="modal-header">
+            <h3>⛽ Log Fuel Fill</h3>
+            <button class="modal-close" onclick="closeModal('modal-fuel')">✕</button>
+          </div>
+          <div class="alert-info">ℹ️ This fuel log is <strong>visible to the school owner</strong>. Please fill all fields accurately. Odometer reading before AND after refueling is required.</div>
+
+          <!-- Odometer section -->
+          <div style="background:var(--surface2);border-radius:12px;padding:16px;margin-bottom:18px;border:1px solid var(--border);">
+            <div style="font-family:'Syne';font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px;">🔢 Odometer Reading</div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Before Refueling (km) * <span style="color:var(--danger);">Required</span></label>
+                <input type="number" id="fuel-odo-before" placeholder="e.g. 24,500" min="0" oninput="calcDistance()">
+                <div style="font-size:11px;color:var(--text2);margin-top:4px;">Enter the odometer reading BEFORE you refuel</div>
+              </div>
+              <div class="form-group">
+                <label>After Refueling (km)</label>
+                <input type="number" id="fuel-odo-after" placeholder="Optional — after refueling" min="0" oninput="calcDistance()">
+                <div style="font-size:11px;color:var(--text2);margin-top:4px;">Can be entered after you refuel</div>
+              </div>
+            </div>
+            <div id="odo-distance-display" style="display:none;margin-top:8px;background:white;border-radius:8px;padding:10px 14px;border:1px solid var(--border);font-size:13px;color:var(--text2);">
+              📏 Distance since last fill: <strong id="odo-distance-val" style="color:var(--primary);">— km</strong>
+            </div>
+          </div>
+
+          <!-- Fuel details -->
+          <div style="font-family:'Syne';font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;">⛽ Fuel Details</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Date *</label>
+              <input type="date" id="fuel-date-new">
+            </div>
+            <div class="form-group">
+              <label>Vehicle *</label>
+              <select id="fuel-vehicle-new">
+                <option value="">Select your vehicle...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Litres Filled (L) * <span style="color:var(--danger);">Required</span></label>
+              <input type="number" id="fuel-litres-new" placeholder="e.g. 20" step="0.5" min="0" oninput="calcPPL()">
+            </div>
+            <div class="form-group">
+              <label>Total Amount Paid (₹) * <span style="color:var(--danger);">Required</span></label>
+              <input type="number" id="fuel-cost-new" placeholder="e.g. 2,040" min="0" oninput="calcPPL()">
+            </div>
+            <div class="form-group">
+              <label>Price per Litre (₹/L)</label>
+              <input type="number" id="fuel-ppl-new" placeholder="Auto calculated" readonly style="background:#f8fafc;color:var(--success);font-weight:600;">
+              <div style="font-size:11px;color:var(--text2);margin-top:4px;">Auto calculated from litres + amount</div>
+            </div>
+            <div class="form-group">
+              <label>Fuel Type</label>
+              <select id="fuel-type-new">
+                <option value="petrol">Petrol</option>
+                <option value="diesel">Diesel</option>
+                <option value="cng">CNG</option>
+              </select>
+            </div>
+            <div class="form-group full">
+              <label>Notes (optional)</label>
+              <input type="text" id="fuel-notes-new" placeholder="e.g. Full tank at HP Petrol Pump, Koramangala">
+            </div>
+          </div>
+
+          <!-- Live summary -->
+          <div id="fuel-summary-box" style="display:none;margin-top:14px;background:var(--surface2);border-radius:10px;padding:14px 16px;border:1px solid var(--border);">
+            <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em;">📋 Submission Summary</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">
+              <div>Odo Before: <strong id="sum-odo-before">—</strong></div>
+              <div>Litres: <strong id="sum-litres">—</strong></div>
+              <div>Amount: <strong id="sum-amount" style="color:var(--danger);">—</strong></div>
+              <div>₹/L Rate: <strong id="sum-ppl">—</strong></div>
+            </div>
+          </div>
+
+          <div style="margin-top:20px;display:flex;gap:10px;">
+            <button class="btn btn-accent" onclick="submitFuelLog()" style="flex:1;">💾 Submit Fuel Log</button>
+            <button class="btn btn-outline" onclick="closeModal('modal-fuel')">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Success Toast -->
+      <div id="toast" style="display:none;position:fixed;bottom:28px;right:28px;background:var(--success);color:white;padding:14px 22px;border-radius:12px;font-size:14px;font-weight:500;box-shadow:var(--shadow-lg);z-index:9999;animation:slideUp 0.3s ease;">
+        <span id="toast-msg">Done!</span>
+      </div>
+
+      <script>
+      // ============================================================
+      // NAVIGATION
+      // ============================================================
+      function showPage(id) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        const navMap = {
+          'page-attendance': 'nav-attendance',
+          'page-class-schedule': 'nav-class-schedule',
+          'page-student-attendance': 'nav-student-attendance',
+          'page-petrol': 'nav-petrol'
+        };
+        const navEl = document.getElementById(navMap[id]);
+        if (navEl) navEl.classList.add('active');
+      }
+
+      // ============================================================
+      // SELF ATTENDANCE
+      // ============================================================
+      let selfMarked = false;
+
+      function openSelfAttModal() {
+        if (selfMarked) { showToast('✅ Attendance already marked for today!'); return; }
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2,'0');
+        const mm = String(now.getMinutes()).padStart(2,'0');
+        document.getElementById('self-att-check-in').value = `${hh}:${mm}`;
+        openModal('modal-self-att');
+      }
+
+      function markSelfPresent() {
+        const status = document.getElementById('self-att-status').value;
+        const time = document.getElementById('self-att-check-in').value;
+        const location = document.getElementById('self-att-location').value || 'DrivePro HQ';
+        selfMarked = true;
+
+        // Update banner
+        const banner = document.getElementById('self-att-banner');
+        banner.style.background = 'linear-gradient(135deg, #15803d, #16a34a)';
+        document.getElementById('self-att-msg').textContent = status === 'late' ? '⏰ Marked — Late' : '✅ Attendance Marked — Present';
+        document.getElementById('self-att-sub').textContent = `Checked in at ${time} · ${location}`;
+        const timeBlock = document.getElementById('self-att-time-block');
+        timeBlock.style.display = 'block';
+        document.getElementById('self-att-time').textContent = time;
+
+        // Update button
+        const btn = document.getElementById('mark-self-btn');
+        btn.textContent = '✅ Marked';
+        btn.disabled = true;
+        btn.style.opacity = '0.7';
+
+        // Show next-steps card
+        document.getElementById('next-steps-card').style.display = 'block';
+
+        // Update history table
+        const tbody = document.querySelector('#page-attendance .data-table tbody');
+        const todayRow = tbody ? tbody.querySelector('tr:first-child') : null;
+        if (todayRow && todayRow.cells && todayRow.cells.length >= 5) {
+          todayRow.cells[1].textContent = time;
+          todayRow.cells[2].innerHTML = `<span class="badge ${status==='present'?'badge-green':'badge-amber'}">${status==='present'?'Present':'Late'}</span>`;
+          todayRow.cells[3].textContent = location;
+          todayRow.cells[4].textContent = 'Marked today';
+        }
+
+        closeModal('modal-self-att');
+        showToast('✅ Attendance marked successfully!');
+      }
+
+      function completeStep(stepNum) {
+        for (let i = 1; i < stepNum; i++) {
+          const el = document.getElementById('step'+i);
+          if (el) { el.className = 'step-circle done'; el.textContent = '✓'; }
+          const conn = document.getElementById('conn'+i);
+          if (conn) conn.className = 'step-connector done';
+        }
+        const current = document.getElementById('step'+stepNum);
+        if (current) current.className = 'step-circle active';
+      }
+
+      // ============================================================
+      // STUDENT ATTENDANCE
+      // ============================================================
+      const attCycle = ['', 'present', 'late', 'absent'];
+      const attConfig = {
+        '': { cls: '', label: '— Not Marked', color: 'var(--text3)', check: '' },
+        'present': { cls: 'present', label: '✅ Present', color: 'var(--success)', check: '✅' },
+        'late':    { cls: 'late',    label: '⏰ Late',    color: 'var(--warning)', check: '⏰' },
+        'absent':  { cls: 'absent',  label: '❌ Absent',  color: 'var(--danger)', check: '❌' },
+      };
+
+      function cycleStudentAtt(card, studentName) {
+        const curr = card.dataset.status || '';
+        const nextIdx = (attCycle.indexOf(curr) + 1) % attCycle.length;
+        const next = attCycle[nextIdx];
+        card.dataset.status = next;
+
+        const cfg = attConfig[next];
+        card.className = 'att-card ' + cfg.cls;
+        document.getElementById('att-status-' + studentName).textContent = cfg.label;
+        document.getElementById('att-status-' + studentName).style.color = cfg.color;
+        document.getElementById('att-check-' + studentName).textContent = cfg.check;
+        updateAttCounts();
+      }
+
+      function updateAttCounts() {
+        const cards = document.querySelectorAll('.att-card[data-student]');
+        let p=0, ab=0, l=0, nd=0;
+        cards.forEach(c => {
+          const s = c.dataset.status;
+          if(s==='present') p++;
+          else if(s==='absent') ab++;
+          else if(s==='late') l++;
+          else nd++;
+        });
+        document.getElementById('att-present-count').textContent = p;
+        document.getElementById('att-absent-count').textContent = ab;
+        document.getElementById('att-late-count').textContent = l;
+        document.getElementById('att-pending-count').textContent = nd;
+      }
+
+      function saveStudentAttendance() {
+        const cards = document.querySelectorAll('.att-card[data-student]');
+        let hasUnmarked = false;
+        cards.forEach(c => { if (!c.dataset.status) hasUnmarked = true; });
+        if (hasUnmarked) {
+          if (!confirm('Some students are not marked. Save anyway?')) return;
+        }
+        completeStep(3);
+        showToast('✅ Student attendance saved successfully!');
+      }
+
+      // ============================================================
+      // RESCHEDULE
+      // ============================================================
+      function openRescheduleModal(studentName) {
+        document.getElementById('reschedule-student-name').textContent = studentName;
+        document.getElementById('reschedule-reason-detail').value = '';
+        document.getElementById('reschedule-reason-type').value = '';
+        openModal('modal-reschedule');
+      }
+
+      function saveReschedule() {
+        const reason = document.getElementById('reschedule-reason-type').value;
+        const detail = document.getElementById('reschedule-reason-detail').value.trim();
+        if (!reason) { alert('Please select a reason for rescheduling'); return; }
+        if (!detail) { alert('Please provide additional details for the reschedule reason'); return; }
+        const studentName = document.getElementById('reschedule-student-name').textContent;
+        closeModal('modal-reschedule');
+        showToast(`⚠ Class for ${studentName} rescheduled. Owner notified.`);
+      }
+
+      // ============================================================
+      // FUEL LOG
+      // ============================================================
+      function openFuelModal() {
+        document.getElementById('fuel-odo-before').value = '';
+        document.getElementById('fuel-odo-after').value = '';
+        document.getElementById('fuel-litres-new').value = '';
+        document.getElementById('fuel-cost-new').value = '';
+        document.getElementById('fuel-ppl-new').value = '';
+        document.getElementById('fuel-summary-box').style.display = 'none';
+        document.getElementById('odo-distance-display').style.display = 'none';
+        openModal('modal-fuel');
+      }
+
+      function calcPPL() {
+        const l = parseFloat(document.getElementById('fuel-litres-new').value);
+        const c = parseFloat(document.getElementById('fuel-cost-new').value);
+        if (l > 0 && c > 0) {
+          const ppl = (c / l).toFixed(2);
+          document.getElementById('fuel-ppl-new').value = ppl;
+        } else {
+          document.getElementById('fuel-ppl-new').value = '';
+        }
+        updateFuelSummary();
+      }
+
+      function calcDistance() {
+        const before = parseFloat(document.getElementById('fuel-odo-before').value);
+        const after = parseFloat(document.getElementById('fuel-odo-after').value);
+        if (before > 0 && after > before) {
+          const dist = after - before;
+          document.getElementById('odo-distance-display').style.display = 'block';
+          document.getElementById('odo-distance-val').textContent = dist.toLocaleString() + ' km';
+        } else {
+          document.getElementById('odo-distance-display').style.display = 'none';
+        }
+        updateFuelSummary();
+      }
+
+      function updateFuelSummary() {
+        const before = document.getElementById('fuel-odo-before').value;
+        const litres = document.getElementById('fuel-litres-new').value;
+        const amount = document.getElementById('fuel-cost-new').value;
+        const ppl = document.getElementById('fuel-ppl-new').value;
+        if (before || litres || amount) {
+          document.getElementById('fuel-summary-box').style.display = 'block';
+          document.getElementById('sum-odo-before').textContent = before ? before + ' km' : '—';
+          document.getElementById('sum-litres').textContent = litres ? litres + ' L' : '—';
+          document.getElementById('sum-amount').textContent = amount ? '₹' + parseFloat(amount).toLocaleString() : '—';
+          document.getElementById('sum-ppl').textContent = ppl ? '₹' + ppl + '/L' : '—';
+        } else {
+          document.getElementById('fuel-summary-box').style.display = 'none';
+        }
+      }
+
+      function submitFuelLog() {
+        const odo = document.getElementById('fuel-odo-before').value;
+        const litres = document.getElementById('fuel-litres-new').value;
+        const cost = document.getElementById('fuel-cost-new').value;
+        if (!odo) { alert('Please enter the odometer reading BEFORE refueling'); return; }
+        if (!litres || parseFloat(litres) <= 0) { alert('Please enter the number of litres filled'); return; }
+        if (!cost || parseFloat(cost) <= 0) { alert('Please enter the amount paid'); return; }
+        closeModal('modal-fuel');
+        showToast('⛽ Fuel log submitted! ₹' + parseFloat(cost).toLocaleString() + ' — ' + litres + 'L');
+      }
+
+      // ============================================================
+      // MODAL HELPERS
+      // ============================================================
+      function openModal(id) {
+        document.getElementById(id).classList.add('open');
+      }
+      function closeModal(id) {
+        document.getElementById(id).classList.remove('open');
+      }
+      document.querySelectorAll('.modal-overlay').forEach(m => {
+        m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+      });
+
+      // ============================================================
+      // TOAST
+      // ============================================================
+      let toastTimer;
+      function showToast(msg) {
+        const t = document.getElementById('toast');
+        document.getElementById('toast-msg').textContent = msg;
+        t.style.display = 'block';
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { t.style.display = 'none'; }, 3500);
+      }
+
+      // ============================================================
+      // INIT
+      // ============================================================
+      document.getElementById('att-date-display').textContent =
+        'Today — ' + new Date().toLocaleDateString('en-IN', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+      </script>
 
       <!-- OWNER FUEL DASHBOARD PAGE -->
       <div class="page" id="page-owner-fuel">
@@ -1307,25 +1855,16 @@
       <h3>📋 Enroll New Student</h3>
       <button class="modal-close" onclick="closeModal('modal-add-student')">✕</button>
     </div>
-    <!-- Auto-generated Student ID banner -->
-    <div style="background:linear-gradient(135deg,var(--primary),#243459);color:white;border-radius:10px;padding:12px 18px;margin-bottom:18px;display:flex;align-items:center;gap:12px;">
-      <span style="font-size:20px;">🪪</span>
-      <div>
-        <div style="font-size:11px;opacity:0.6;text-transform:uppercase;letter-spacing:.06em;">Auto-Generated Student ID</div>
-        <div style="font-family:'Syne';font-size:18px;font-weight:700;color:var(--accent)" id="preview-student-id">DP-000001</div>
-      </div>
-      <button onclick="regenerateStudentId()" style="margin-left:auto;background:rgba(255,255,255,0.15);border:none;color:white;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px;">↻ New ID</button>
-    </div>
     <!-- Tabs for sections -->
     <div class="tabs" style="margin-bottom:18px;">
       <div class="tab active" onclick="switchStudentTab('personal',this)">Personal Info</div>
       <div class="tab" onclick="switchStudentTab('course',this)">Course & Fee</div>
-      <div class="tab" onclick="switchStudentTab('services',this)">Other Services</div>
     </div>
     <!-- Personal Info Tab -->
     <div id="stab-personal">
       <div class="form-grid">
         <div class="form-group"><label>Full Name *</label><input type="text" id="qs-name" placeholder="Student full name"></div>
+        <div class="form-group"><label>Student ID</label><input type="text" id="qs-student-id" placeholder="Optional student ID"></div>
         <div class="form-group"><label>Date of Birth *</label><input type="date" id="qs-dob"></div>
         <div class="form-group"><label>Phone Number *</label><input type="tel" id="qs-phone" placeholder="10-digit mobile"></div>
         <div class="form-group"><label>Email Address</label><input type="email" id="qs-email" placeholder="student@email.com"></div>
@@ -1361,78 +1900,6 @@
         <div class="form-group full"><label>Course Notes</label><textarea id="qs-notes" style="min-height:60px;" placeholder="Any special instructions or notes..."></textarea></div>
       </div>
     </div>
-    <!-- Other Services Tab -->
-    <div id="stab-services" style="display:none;">
-      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:13px;color:#1d4ed8;">
-        ℹ️ Select additional services the student is availing. Fees will be added to total.
-      </div>
-      <div id="services-list" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div class="service-item" style="border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer;" onclick="toggleService(this,'LL Application','500')">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <input type="checkbox" class="svc-check" style="margin:0;">
-            <div>
-              <div style="font-weight:500;font-size:13px;">📄 LL Application</div>
-              <div style="font-size:11px;color:var(--text2);">Learner's Licence processing</div>
-            </div>
-            <div style="margin-left:auto;font-weight:600;color:var(--success);">₹500</div>
-          </div>
-        </div>
-        <div class="service-item" style="border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer;" onclick="toggleService(this,'DL Application','800')">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <input type="checkbox" class="svc-check" style="margin:0;">
-            <div>
-              <div style="font-weight:500;font-size:13px;">🪪 DL Application</div>
-              <div style="font-size:11px;color:var(--text2);">Driving Licence processing</div>
-            </div>
-            <div style="margin-left:auto;font-weight:600;color:var(--success);">₹800</div>
-          </div>
-        </div>
-        <div class="service-item" style="border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer;" onclick="toggleService(this,'Badge','200')">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <input type="checkbox" class="svc-check" style="margin:0;">
-            <div>
-              <div style="font-weight:500;font-size:13px;">🏷️ Badge</div>
-              <div style="font-size:11px;color:var(--text2);">School ID badge</div>
-            </div>
-            <div style="margin-left:auto;font-weight:600;color:var(--success);">₹200</div>
-          </div>
-        </div>
-        <div class="service-item" style="border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer;" onclick="toggleService(this,'Uniform','350')">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <input type="checkbox" class="svc-check" style="margin:0;">
-            <div>
-              <div style="font-weight:500;font-size:13px;">👕 Uniform</div>
-              <div style="font-size:11px;color:var(--text2);">School uniform set</div>
-            </div>
-            <div style="margin-left:auto;font-weight:600;color:var(--success);">₹350</div>
-          </div>
-        </div>
-        <div class="service-item" style="border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer;" onclick="toggleService(this,'Medical Certificate','300')">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <input type="checkbox" class="svc-check" style="margin:0;">
-            <div>
-              <div style="font-weight:500;font-size:13px;">🏥 Medical Certificate</div>
-              <div style="font-size:11px;color:var(--text2);">Form 1A processing</div>
-            </div>
-            <div style="margin-left:auto;font-weight:600;color:var(--success);">₹300</div>
-          </div>
-        </div>
-        <div class="service-item" style="border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer;" onclick="toggleService(this,'Smart Card Fee','150')">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <input type="checkbox" class="svc-check" style="margin:0;">
-            <div>
-              <div style="font-weight:500;font-size:13px;">💳 Smart Card Fee</div>
-              <div style="font-size:11px;color:var(--text2);">RTO smart card charges</div>
-            </div>
-            <div style="margin-left:auto;font-weight:600;color:var(--success);">₹150</div>
-          </div>
-        </div>
-      </div>
-      <div style="margin-top:14px;padding:12px 16px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:space-between;">
-        <span style="font-weight:500;">Services Total:</span>
-        <span style="font-family:'Syne';font-size:18px;font-weight:700;color:var(--success)" id="services-total">₹0</span>
-      </div>
-    </div>
     <div style="margin-top:20px;display:flex;gap:10px;border-top:1px solid var(--border);padding-top:16px;">
       <button class="btn btn-accent" data-action="add_student" onclick="addStudentFromModal()" style="flex:1;">✓ Enroll Student</button>
       <button class="btn btn-outline" onclick="closeModal('modal-add-student')">Cancel</button>
@@ -1466,7 +1933,7 @@
       <div class="form-group full"><label>Description</label><input type="text" id="tx-desc" placeholder="Details of the transaction"></div>
     </div>
     <div style="margin-top:20px;display:flex;gap:10px;">
-      <button class="btn btn-accent" data-permission="office" onclick="addTransactionFromModal()">Add Entry</button>
+      <button class="btn btn-accent" data-permission="add_transaction" onclick="addTransaction()">Add Entry</button>
       <button class="btn btn-outline" onclick="closeModal('modal-add-tx')">Cancel</button>
     </div>
   </div>
@@ -1806,6 +2273,22 @@
       <div class="form-group"><label>Email Address</label>
         <input type="email" id="staff-email" placeholder="staff@school.com">
       </div>
+      <div class="form-group"><label>Password</label>
+        <div style="position: relative; display: flex; align-items: center;">
+          <input type="password" id="staff-password" placeholder="Set initial password" style="padding-right: 40px; width: 100%;">
+          <button type="button" onclick="togglePasswordVisibility('staff-password')" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text2); padding: 4px; border-radius: 4px; font-size: 14px;">
+            <span id="staff-password-icon">👁</span>
+          </button>
+        </div>
+      </div>
+      <div class="form-group"><label>Confirm Password</label>
+        <div style="position: relative; display: flex; align-items: center;">
+          <input type="password" id="staff-confirm-password" placeholder="Confirm password" style="padding-right: 40px; width: 100%;">
+          <button type="button" onclick="togglePasswordVisibility('staff-confirm-password')" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text2); padding: 4px; border-radius: 4px; font-size: 14px;">
+            <span id="staff-confirm-password-icon">👁</span>
+          </button>
+        </div>
+      </div>
       <div class="form-group"><label>Phone Number</label>
         <input type="tel" id="staff-phone" placeholder="Phone number">
       </div>
@@ -2025,6 +2508,11 @@ service cloud.firestore {
       return isSchoolMember(schoolId) && getUserRole(schoolId) == requiredRole;
     }
     
+    // userSchools index — users can only read/write their own doc
+    match /userSchools/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
     // Schools collection - strict role-based access
     match /schools/{schoolId} {
       // Owners can read their schools
@@ -2045,21 +2533,15 @@ service cloud.firestore {
       
       // Students collection - role-based access
       match /students/{studentId} {
-        // Owners can read/write all students
-        allow read, write: if isOwner(schoolId);
+        // Owners and office staff can read/write all students
+        allow read, write: if isOwner(schoolId) || hasRole(schoolId, 'office');
         
-        // Office staff can read/write all students
-        allow read, write: if hasRole(schoolId, 'office');
+        // Instructors can read all students (client-side filtering by assignment)
+        allow read: if hasRole(schoolId, 'instructor');
         
-        // Instructors can only read students assigned to them
-        allow read: if hasRole(schoolId, 'instructor') && 
+        // Instructors can update classes/attendance/status fields on their students
+        allow update: if hasRole(schoolId, 'instructor') &&
           resource.data.instructorEmail == request.auth.token.email;
-        
-        // Instructors can only update attendance and progress for their students
-        allow update: if hasRole(schoolId, 'instructor') && 
-          resource.data.instructorEmail == request.auth.token.email &&
-          request.writeFields.size() > 0 &&
-          request.writeFields.hasAny(['attendance', 'classes', 'status']);
       }
       
       // Transactions collection - role-based access
@@ -2083,18 +2565,9 @@ service cloud.firestore {
         allow read: if request.auth != null && request.auth.uid == userId;
       }
       
-      // Attendance collection - role-based access
-      match /attendance/{date}/{studentId} {
-        // Owners can read/write all attendance
-        allow read, write: if isOwner(schoolId);
-        
-        // Office staff can read/write all attendance
-        allow read, write: if hasRole(schoolId, 'office');
-        
-        // Instructors can only mark attendance for their assigned students
-        allow read, write: if hasRole(schoolId, 'instructor') && 
-          exists(/databases/$(database)/documents/schools/$(schoolId)/students/$(studentId)) &&
-          get(/databases/$(database)/documents/schools/$(schoolId)/students/$(studentId)).data.instructorEmail == request.auth.token.email;
+      // Attendance collection - one document per date, keyed by student name
+      match /attendance/{date} {
+        allow read, write: if isOwner(schoolId) || hasRole(schoolId, 'office') || hasRole(schoolId, 'instructor');
       }
       
       // Schedule collection - role-based access
@@ -2119,10 +2592,23 @@ service cloud.firestore {
         // Office staff can read all fuel entries
         allow read: if hasRole(schoolId, 'office');
         
-        // Instructors can read all and write their own entries
+        // Instructors can read all and write/create their own entries
         allow read: if isSchoolMember(schoolId);
-        allow write: if hasRole(schoolId, 'instructor') && 
+        allow create: if hasRole(schoolId, 'instructor') &&
+          request.auth.token.email == request.resource.data.instructorEmail;
+        allow update, delete: if hasRole(schoolId, 'instructor') &&
           request.auth.token.email == resource.data.instructorEmail;
+      }
+      
+      // Staff subcollection
+      match /staff/{staffId} {
+        allow read, write: if isOwner(schoolId) || hasRole(schoolId, 'office');
+        allow read: if request.auth != null && request.auth.uid == staffId;
+      }
+      
+      // Notifications subcollection
+      match /notifications/{notifId} {
+        allow read, write: if isOwner(schoolId) || isSchoolMember(schoolId);
       }
       
       // Default deny for all other collections
@@ -2455,16 +2941,19 @@ const FirebaseService = {
         const indexData = indexDoc.data();
         const schoolIds = indexData.schoolIds || [];
         const roles = indexData.roles || {};
+        const ownerEmails = indexData.ownerEmails || {};
 
         console.log('getUserMemberSchools index doc found, schools:', schoolIds);
 
         for (const schoolId of schoolIds) {
+          const storedRole = roles[schoolId] || 'office';
+          // Normalize: treat 'admin' as 'office' to match login buttons
+          const resolvedRole = (storedRole === 'admin') ? 'office' : storedRole;
+          
+          // Try to fetch school document, but use index data if permission denied
           try {
             const schoolDoc = await this.schoolsRef.doc(schoolId).get();
             if (schoolDoc.exists) {
-              const storedRole = roles[schoolId] || 'office';
-              // Normalize: treat 'admin' as 'office' to match login buttons
-              const resolvedRole = (storedRole === 'admin') ? 'office' : storedRole;
               userSchools.push({
                 id: schoolDoc.id,
                 ...schoolDoc.data(),
@@ -2473,6 +2962,14 @@ const FirebaseService = {
             }
           } catch (schoolErr) {
             console.warn('Could not fetch school', schoolId, ':', schoolErr.message);
+            // Fallback: use minimal data from index for role verification
+            userSchools.push({
+              id: schoolId,
+              userRole: resolvedRole,
+              ownerEmail: ownerEmails[schoolId] || null,
+              name: 'School (details unavailable)',
+              _fromIndex: true
+            });
           }
         }
         return userSchools;
@@ -2513,10 +3010,11 @@ const FirebaseService = {
               // Write the index doc now so next login uses the fast path
               try {
                 const existing = await db.collection('userSchools').doc(userId).get();
-                const existingData = existing.exists ? existing.data() : { schoolIds: [], roles: {} };
+                const existingData = existing.exists ? existing.data() : { schoolIds: [], roles: {}, ownerEmails: {} };
                 if (!existingData.schoolIds.includes(schoolId)) {
                   existingData.schoolIds.push(schoolId);
                   existingData.roles[schoolId] = resolvedRole;
+                  existingData.ownerEmails[schoolId] = schoolDoc.data().ownerEmail || null;
                   await db.collection('userSchools').doc(userId).set(existingData);
                   console.log('Wrote /userSchools index doc for', userId);
                 }
@@ -2666,22 +3164,44 @@ const listeners = [];
 // Load initial data from Firebase
 async function loadInitialData() {
   try {
-    // Load all collections
-    data.students = await FirebaseService.getStudents();
-    data.transactions = await FirebaseService.getTransactions();
-    data.dlTests = await FirebaseService.getDocuments(FirebaseService.dlTestsRef);
-    data.fuel = await FirebaseService.getDocuments(FirebaseService.fuelRef);
-    data.notifications = await FirebaseService.getDocuments(FirebaseService.notificationsRef);
-    
-    // Load today's attendance
+    // Load data based on user role
+    if (currentRole === 'owner') {
+      // Owner loads all data
+      data.students = await FirebaseService.getStudents();
+      data.transactions = await FirebaseService.getTransactions();
+      data.dlTests = await FirebaseService.getDocuments(FirebaseService.dlTestsRef);
+      data.fuel = await FirebaseService.getDocuments(FirebaseService.fuelRef);
+      data.notifications = await FirebaseService.getDocuments(FirebaseService.notificationsRef);
+    } else if (currentRole === 'office') {
+      // Office staff: load students, transactions, DL tests, attendance, schedule
+      try { data.students = await FirebaseService.getStudents(); } catch(e) { console.warn('office: students load failed:', e.message); }
+      try { data.transactions = await FirebaseService.getTransactions(); } catch(e) { console.warn('office: transactions load failed:', e.message); }
+      try { data.dlTests = await FirebaseService.getDocuments(FirebaseService.dlTestsRef); } catch(e) { console.warn('office: dlTests load failed:', e.message); }
+      try { data.notifications = await FirebaseService.getDocuments(FirebaseService.notificationsRef); } catch(e) { console.warn('office: notifications load failed:', e.message); }
+    } else if (currentRole === 'instructor') {
+      // Instructor: load their assigned students, fuel, attendance, schedule
+      try { data.students = await FirebaseService.getStudents(); } catch(e) { console.warn('instructor: students load failed:', e.message); }
+      try { data.fuel = await FirebaseService.getDocuments(FirebaseService.fuelRef); } catch(e) { console.warn('instructor: fuel load failed:', e.message); }
+    }
+
+    // Load today's attendance (all roles need this)
     const today = new Date().toISOString().split('T')[0];
-    data.attendance[today] = await FirebaseService.getAttendance(today);
+    try {
+      data.attendance[today] = await FirebaseService.getAttendance(today);
+    } catch (e) {
+      console.warn('Could not load attendance:', e.message);
+      data.attendance[today] = [];
+    }
     
-    // Load schedule
-    const scheduleSnapshot = await FirebaseService.scheduleRef.get();
-    scheduleSnapshot.forEach(doc => {
-      data.schedule[doc.id] = doc.data();
-    });
+    // Load schedule (all roles need this)
+    try {
+      const scheduleSnapshot = await FirebaseService.scheduleRef.get();
+      scheduleSnapshot.forEach(doc => {
+        data.schedule[doc.id] = doc.data();
+      });
+    } catch (e) {
+      console.warn('Could not load schedule:', e.message);
+    }
     
     console.log('Initial data loaded from Firebase');
   } catch (error) {
@@ -2691,68 +3211,79 @@ async function loadInitialData() {
 
 // Setup real-time listeners
 function setupRealtimeListeners() {
+  // Non-owner roles get targeted listeners only (students, attendance, schedule)
+  
   // Clear existing listeners
   listeners.forEach(unsubscribe => unsubscribe());
   listeners.length = 0;
   
-  // Students listener
-  const studentsUnsubscribe = FirebaseService.onStudentsChange(students => {
-    data.students = students;
-    if (currentPage === 'all-students' || currentPage === 'dashboard' || currentPage === 'my-students') {
-      renderStudentsTable();
-      renderDashboard();
-      renderInstructorStudents();
-    }
-  });
-  listeners.push(studentsUnsubscribe);
+  // Students listener (owner only)
+  try {
+    const studentsUnsubscribe = FirebaseService.onStudentsChange(students => {
+      data.students = students;
+      if (currentPage === 'all-students' || currentPage === 'dashboard' || currentPage === 'my-students') {
+        renderStudentsTable();
+        renderDashboard();
+        renderInstructorStudents();
+      }
+    });
+    listeners.push(studentsUnsubscribe);
+  } catch (e) {
+    console.warn('Could not setup students listener:', e.message);
+  }
   
-  // Transactions listener
-  const transactionsUnsubscribe = FirebaseService.onTransactionsChange(transactions => {
-    data.transactions = transactions;
-    if (currentPage === 'cashflow' || currentPage === 'dashboard') {
-      renderCashflow();
-      renderDashboard();
+  // Transactions listener (owner and office)
+  if (currentRole === 'owner' || currentRole === 'office') {
+    try {
+      const transactionsUnsubscribe = FirebaseService.onTransactionsChange(transactions => {
+        data.transactions = transactions;
+        if (currentPage === 'cashflow' || currentPage === 'dashboard') {
+          renderCashflow();
+          renderDashboard();
+        }
+      });
+      listeners.push(transactionsUnsubscribe);
+    } catch (e) {
+      console.warn('Could not setup transactions listener:', e.message);
     }
-  });
-  listeners.push(transactionsUnsubscribe);
+  }
   
-  // Today's attendance listener
-  const today = new Date().toISOString().split('T')[0];
-  const attendanceUnsubscribe = FirebaseService.onAttendanceChange(today, attendance => {
-    data.attendance[today] = attendance;
-    if (currentPage === 'attendance' || currentPage === 'dashboard') {
-      renderAttendance();
-      renderDashboard();
-    }
-  });
-  listeners.push(attendanceUnsubscribe);
+  // Today's attendance listener (owner only)
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const attendanceUnsubscribe = FirebaseService.onAttendanceChange(today, attendance => {
+      data.attendance[today] = attendance;
+      if (currentPage === 'attendance' || currentPage === 'dashboard') {
+        renderAttendance();
+        renderDashboard();
+      }
+    });
+    listeners.push(attendanceUnsubscribe);
+  } catch (e) {
+    console.warn('Could not setup attendance listener:', e.message);
+  }
   
-  // Notifications listener
-  const notificationsUnsubscribe = FirebaseService.onDocumentsChange(FirebaseService.notificationsRef, notifications => {
-    data.notifications = notifications;
-    if (currentPage === 'notifications') {
-      renderNotifications();
-    }
-  }, 'createdAt', 'desc');
-  listeners.push(notificationsUnsubscribe);
+  // Notifications listener (owner only)
+  try {
+    const notificationsUnsubscribe = FirebaseService.onDocumentsChange(FirebaseService.notificationsRef, notifications => {
+      data.notifications = notifications;
+      if (currentPage === 'notifications') {
+        renderNotifications();
+      }
+    }, 'createdAt', 'desc');
+    listeners.push(notificationsUnsubscribe);
+  } catch (e) {
+    console.warn('Could not setup notifications listener:', e.message);
+  }
   
   // Admins listener (only if current school is selected)
   if (currentSchoolId && currentRole === 'owner') {
     const adminsUnsubscribe = FirebaseService.schoolsRef.doc(currentSchoolId).collection('users').onSnapshot(snapshot => {
-      const firebaseAdmins = snapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        firebaseId: doc.id, // Ensure firebaseId is set to document ID
-        ...doc.data() 
-      }));
-      console.log('Firebase admins received:', firebaseAdmins);
-      console.log('Current local admins:', data.admins);
-      
-      // Always update with Firebase data (even if empty)
+      const firebaseAdmins = snapshot.docs.map(doc => ({ id: doc.id, firebaseId: doc.id, ...doc.data() }));
+      // Ignore stale empty flush that fires when a previous listener is unsubscribed
+      if (firebaseAdmins.length === 0 && data.admins.length > 0) return;
       data.admins = firebaseAdmins;
-      
-      if (currentPage === 'admin-management') {
-        renderAdminsTable();
-      }
+      if (currentPage === 'admin-management') renderAdminsTable();
     }, error => {
       console.error('Error in admins listener:', error);
     });
@@ -2762,19 +3293,11 @@ function setupRealtimeListeners() {
   // Staff listener (only if current school is selected)
   if (currentSchoolId && (currentRole === 'owner' || currentRole === 'office')) {
     const staffUnsubscribe = FirebaseService.schoolsRef.doc(currentSchoolId).collection('staff').onSnapshot(snapshot => {
-      const firebaseStaff = snapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      }));
-      console.log('Firebase staff received:', firebaseStaff);
-      console.log('Current local staff:', data.staff);
-      
-      // Always update with Firebase data (even if empty)
+      const firebaseStaff = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Ignore stale empty flush that fires when a previous listener is unsubscribed
+      if (firebaseStaff.length === 0 && data.staff.length > 0) return;
       data.staff = firebaseStaff;
-      
-      if (currentPage === 'staff-management') {
-        renderStaffTable();
-      }
+      if (currentPage === 'staff-management') renderStaffTable();
     }, error => {
       console.error('Error in staff listener:', error);
     });
@@ -2813,6 +3336,7 @@ const navConfig = {
       {id:'dashboard',icon:'&#128202;',label:'Dashboard'},
       {id:'all-students',icon:'&#128101;',label:'All Students'},
       {id:'cashflow',icon:'&#128176;',label:'Cash Flow'},
+      {id:'reports',icon:'&#128200;',label:'Reports'},
     ]},
     {section:'Operations', items:[
       {id:'dl-tests',icon:'&#128990;',label:'DL Tests'},
@@ -2906,12 +3430,64 @@ async function verifyUserRole(userId, selectedRole) {
       console.log('Looking for role:', selectedRole, 'in schools:', memberSchools);
       
       // Check if user has the selected role in any school
-      const hasRole = memberSchools.some(school => {
+      let hasRole = memberSchools.some(school => {
         console.log('Checking school:', school.id, '| stored userRole:', school.userRole, '| selected:', selectedRole);
         // Match exact role, or treat 'admin' stored value as 'office'
         const storedRole = school.userRole === 'admin' ? 'office' : school.userRole;
         return storedRole === selectedRole;
       });
+      
+      // Fallback: back-fill users subcollection for staff created before the dual-write fix.
+      // Triggered when: no schools at all, OR all schools are _fromIndex (school doc unreadable,
+      // meaning the users/{uid} doc is missing so Firestore rules block school reads).
+      const needsBackfill = memberSchools.length === 0 ||
+        memberSchools.every(s => s._fromIndex);
+      if (needsBackfill) {
+        console.log('No member schools found via userSchools index — trying staff subcollection fallback');
+        try {
+          const staffSnap = await db.collectionGroup('staff').where('userId', '==', userId).get();
+          if (!staffSnap.empty) {
+            for (const staffDoc of staffSnap.docs) {
+              const staffData = staffDoc.data();
+              const schoolId = staffData.schoolId || staffDoc.ref.parent.parent.id;
+              const staffRole = staffData.role === 'instructor' ? 'instructor' : 'office';
+              if (staffRole === selectedRole && schoolId) {
+                console.log('Found staff record in schools/' + schoolId + '/staff, role:', staffRole);
+                // Back-fill the users subcollection and userSchools index so future logins use the fast path
+                const ownerEmail = staffData.ownerEmail || null;
+                try {
+                  await db.collection('schools').doc(schoolId).collection('users').doc(userId).set({
+                    userId,
+                    role: staffRole,
+                    userRole: staffRole,
+                    name: staffData.name,
+                    email: staffData.email,
+                    schoolId,
+                    status: 'active',
+                    addedAt: firebase.firestore.FieldValue.serverTimestamp()
+                  }, { merge: true });
+                  await db.collection('userSchools').doc(userId).set({
+                    schoolIds: firebase.firestore.FieldValue.arrayUnion(schoolId),
+                    roles: { [schoolId]: staffRole },
+                    ownerEmails: { [schoolId]: ownerEmail },
+                    updatedAt: new Date().toISOString()
+                  }, { merge: true });
+                  console.log('Back-filled users doc and userSchools index for staff user', userId);
+                } catch (backfillErr) {
+                  console.warn('Back-fill failed (non-fatal):', backfillErr.message);
+                }
+                hasRole = true;
+                // Reload memberSchools so currentSchoolId can be set downstream
+                const reloaded = await FirebaseService.getUserMemberSchools(userId);
+                userSchools = reloaded.length > 0 ? reloaded : [{ id: schoolId, userRole: staffRole }];
+                break;
+              }
+            }
+          }
+        } catch (staffFallbackErr) {
+          console.warn('Staff subcollection fallback failed (index may not be deployed):', staffFallbackErr.message);
+        }
+      }
       
       console.log('Has role result:', hasRole);
       
@@ -2955,7 +3531,7 @@ function hasPageAccess(pageId) {
       'owner-fuel', 'vehicles', 'owner-attendance'
     ],
     office: [
-      'dashboard', 'all-students', 'cashflow', 
+      'dashboard', 'all-students', 'cashflow', 'reports',
       'dl-tests', 'notifications', 'attendance', 'class-schedule', 'instructor', 'staff-management', 'owner-attendance'
     ],
     instructor: [
@@ -3742,17 +4318,32 @@ function getFilteredData(dataType) {
 // ============================================================
 function renderAllData() {
   renderStudentsTable();
-  renderCashflow();
-  renderReport();
   renderSchedule();
   renderNotifications();
-  renderDLTests();
   renderAttendance();
   renderInstructorStudents();
-  renderAdminsTable();
-  // Fuel: render appropriate view based on role
-  if (currentRole === 'instructor') renderDriverFuelPage();
-  else if (currentRole === 'owner') renderOwnerFuelDashboard();
+  renderDashboard();
+  
+  // Owner-only renders
+  if (currentRole === 'owner') {
+    renderCashflow();
+    renderReport();
+    renderDLTests();
+    renderAdminsTable();
+    renderOwnerFuelDashboard();
+  }
+  
+  // Office renders
+  if (currentRole === 'office') {
+    renderCashflow();
+    renderReport();
+    renderDLTests();
+  }
+  
+  // Instructor-specific renders
+  if (currentRole === 'instructor') {
+    renderDriverFuelPage();
+  }
 }
 
 function refreshPage(id) {
@@ -4249,7 +4840,7 @@ function openCreateSchoolWithManagerModal() {
   document.getElementById('admin-email').value = '';
   document.getElementById('admin-password').value = '';
   document.getElementById('admin-confirm-password').value = '';
-  document.getElementById('admin-role').value = 'owner';
+  document.getElementById('admin-role').value = 'office';
   document.getElementById('admin-phone').value = '';
   document.getElementById('perm-students').checked = true;
   document.getElementById('perm-transactions').checked = true;
@@ -4530,6 +5121,7 @@ async function createSchoolWithAdmin() {
       latitude: parseFloat(schoolLatitude),
       longitude: parseFloat(schoolLongitude),
       ownerId: originalOwnerUid,
+      ownerEmail: currentUser.email,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       status: 'active'
@@ -4621,6 +5213,7 @@ async function createSchoolWithAdmin() {
       await db.collection('userSchools').doc(adminUid).set({
         schoolIds: firebase.firestore.FieldValue.arrayUnion(school.id),
         roles: { [school.id]: normalizedRole },
+        ownerEmails: { [school.id]: currentUser.email },
         updatedAt: new Date().toISOString()
       }, { merge: true });
 
@@ -4769,13 +5362,19 @@ function switchToOverallView() {
 // DASHBOARD
 // ============================================================
 function renderDashboard() {
+  // Auto-select school for admins/staff if not already set
+  if (!currentSchoolId && userSchools.length > 0) {
+    currentSchoolId = userSchools[0].id;
+    FirebaseService.setSchool(currentSchoolId);
+  }
+  
   // Check if school is selected
   if (!currentSchoolId) {
-    const statsGrid = document.querySelector('.stats-grid');
+    const statsGrid = document.getElementById('dashboard-stats-grid');
     if(statsGrid) statsGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text2);">Please select a school to view dashboard</div>';
     
-    const recent = document.getElementById('dash-recent');
-    if(recent) recent.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text2);">No school selected</div>';
+    const recent = document.getElementById('recent-tx');
+    if(recent) recent.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:40px;color:var(--text2);">No school selected</td></tr>';
     
     // Clear chart
     const ctx = document.getElementById('dash-chart');
@@ -4790,25 +5389,49 @@ function renderDashboard() {
   const currentSchool = userSchools.find(s => s.id === currentSchoolId);
   const schoolName = currentSchool ? currentSchool.name : 'Selected School';
   
-  // School-specific data
+  // School-specific data - filter by current school
   const today = new Date().toISOString().split('T')[0];
   const thisMonth = new Date().toISOString().slice(0,7);
   
+  // Filter data by school
+  const schoolStudents = data.students.filter(s => s.schoolId === currentSchoolId);
+  const schoolTransactions = data.transactions.filter(t => t.schoolId === currentSchoolId);
+  const schoolDLTests = data.dlTests.filter(t => t.schoolId === currentSchoolId);
+  const schoolSchedule = data.schedule[new Date().toLocaleDateString('en-US', {weekday: 'long'})]?.filter(s => s.schoolId === currentSchoolId) || [];
+  const schoolAttendance = data.attendance[today] || {};
+  const schoolAttendanceRecords = Object.values(schoolAttendance).filter(a => a.schoolId === currentSchoolId);
+  
   // Calculate school-specific stats
-  const totalStudents = data.students.length;
-  const activeStudents = data.students.filter(s => s.status === 'Active').length;
-  const todayIncome = data.transactions.filter(t => t.type === 'income' && t.date === today).reduce((s, t) => s + t.amount, 0);
-  const todayExpense = data.transactions.filter(t => t.type === 'expense' && t.date === today).reduce((s, t) => s + t.amount, 0);
-  const monthIncome = data.transactions.filter(t => t.type === 'income' && t.date.startsWith(thisMonth)).reduce((s, t) => s + t.amount, 0);
-  const monthExpense = data.transactions.filter(t => t.type === 'expense' && t.date.startsWith(thisMonth)).reduce((s, t) => s + t.amount, 0);
-  const pendingDLTests = data.dlTests.filter(t => t.date >= today).length;
-  const todayClasses = data.schedule[new Date().toLocaleDateString('en-US', {weekday: 'long'})]?.length || 0;
-  const presentToday = Object.values(data.attendance[today] || {}).filter(a => a.status === 'present').length;
+  const totalStudents = schoolStudents.length;
+  const activeStudents = schoolStudents.filter(s => s.status === 'Active').length;
+  const todayIncome = schoolTransactions.filter(t => t.type === 'income' && t.date === today).reduce((s, t) => s + t.amount, 0);
+  const todayExpense = schoolTransactions.filter(t => t.type === 'expense' && t.date === today).reduce((s, t) => s + t.amount, 0);
+  const monthIncome = schoolTransactions.filter(t => t.type === 'income' && t.date.startsWith(thisMonth)).reduce((s, t) => s + t.amount, 0);
+  const monthExpense = schoolTransactions.filter(t => t.type === 'expense' && t.date.startsWith(thisMonth)).reduce((s, t) => s + t.amount, 0);
+  const pendingDLTests = schoolDLTests.filter(t => t.date >= today).length;
+  const todayClasses = schoolSchedule.length;
+  const presentToday = schoolAttendanceRecords.filter(a => a.status === 'present').length;
+  const totalInstructors = data.staff ? data.staff.filter(s => s.role === 'instructor').length : 0;
   
   // Chart with school data
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const currentYear = new Date().getFullYear();
   const incomes = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   const expenses = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  
+  // Calculate monthly income/expense for current year
+  schoolTransactions.forEach(t => {
+    const date = new Date(t.date);
+    if (date.getFullYear() === currentYear) {
+      const monthIndex = date.getMonth();
+      if (t.type === 'income') {
+        incomes[monthIndex] += t.amount;
+      } else {
+        expenses[monthIndex] += t.amount;
+      }
+    }
+  });
+  
   const ctx = document.getElementById('dash-chart');
   if(ctx && ctx.getContext) {
     ctx.width = ctx.offsetWidth;
@@ -4817,7 +5440,7 @@ function renderDashboard() {
     if(ctx2d) {
       const w = ctx.width; const h = ctx.height;
       ctx2d.clearRect(0,0,w,h);
-      const max = Math.max(...incomes,...expenses);
+      const max = Math.max(...incomes,...expenses, 1);
       const xStep = w/(months.length-1);
       const yScale = (h-40)/max;
       // Draw grid
@@ -4835,49 +5458,36 @@ function renderDashboard() {
   
   // School-specific stats
   const stats = [
-    {label:'Total Students',value:totalStudents,sub: `${activeStudents} active`, color:'var(--primary)'},
-    {label:'Today\'s Income',value:'&#8377;'+todayIncome.toLocaleString(),sub:'Fees collected', color:'var(--success)'},
-    {label:'Today\'s Expense',value:'&#8377;'+todayExpense.toLocaleString(),sub:'Fuel + misc', color:'var(--danger)'},
-    {label:'Pending DL Tests',value:pendingDLTests,sub:'Upcoming tests', color:'var(--accent2)'},
-    {label:'Classes Today',value:todayClasses,sub:'Scheduled sessions', color:'var(--warning)'},
-    {label:'Attendance Today',value:presentToday,sub:'Students present', color:'var(--info)'}
+    {label:'Total Students',value:totalStudents,sub:'Total enrolled', color:'var(--primary)', class:'accent'},
+    {label:'Active Learners',value:activeStudents,sub:'Currently learning', color:'var(--accent2)', class:'blue'},
+    {label:'Today\'s Income',value:'&#8377;'+todayIncome.toLocaleString(),sub:'Fees collected', color:'var(--success)', class:'green'},
+    {label:'Today\'s Expense',value:'&#8377;'+todayExpense.toLocaleString(),sub:'Operational costs', color:'var(--danger)', class:'red'},
+    {label:'DL Tests Scheduled',value:pendingDLTests,sub:'Upcoming tests', color:'', class:''},
+    {label:'Instructors',value:totalInstructors,sub:'Total instructors', color:'', class:''}
   ];
-  const statsGrid = document.querySelector('.stats-grid');
+  const statsGrid = document.getElementById('dashboard-stats-grid');
   if(statsGrid) statsGrid.innerHTML = stats.map(s=>`
-    <div class="stat-card ${s.color}">
+    <div class="stat-card ${s.class}">
       <div class="sc-label">${s.label}</div>
       <div class="sc-value" style="color:${s.color}">${s.value}</div>
       <div class="sc-sub">${s.sub}</div>
     </div>
   `).join('');
   
-  // Recent activity for this school
-  const recent = document.getElementById('dash-recent');
+  // Recent transactions for this school
+  const recent = document.getElementById('recent-tx');
   if(recent) {
-    if (data.transactions.length === 0) {
-      recent.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text2);">No transactions yet for ' + schoolName + '</div>';
+    if (schoolTransactions.length === 0) {
+      recent.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:40px;color:var(--text2);">No transactions yet for ' + schoolName + '</td></tr>';
     } else {
-      let html = '<div style="padding:10px;background:var(--accent);color:white;border-radius:8px;margin-bottom:15px;">';
-      html += '<div style="font-weight:600;">' + schoolName + '</div>';
-      html += '<div style="font-size:12px;opacity:0.9;">School-specific dashboard</div>';
-      html += '</div>';
-      
-      data.transactions.slice(0,5).forEach(t => {
-        html += '<div class="dash-item">';
-        html += '<div style="display:flex;align-items:center;gap:10px;">';
-        html += '<div class="icon" style="background:' + (t.type === 'income' ? 'var(--success)' : 'var(--danger)') + '22;color:' + (t.type === 'income' ? 'var(--success)' : 'var(--danger)') + ';">' + (t.type === 'income' ? '&#8593;' : '&#8595;') + '</div>';
-        html += '<div>';
-        html += '<div style="font-weight:500;font-size:14px;">' + t.desc + '</div>';
-        html += '<div style="font-size:12px;color:var(--text2);">' + t.date + ' ? ' + t.category + '</div>';
-        html += '</div>';
-        html += '</div>';
-        html += '<div style="text-align:right;">';
-        html += '<div style="font-weight:600;color:' + (t.type === 'income' ? 'var(--success)' : 'var(--danger)') + ';">' + (t.type === 'income' ? '+' : '-') + '&#8377;' + t.amount.toLocaleString() + '</div>';
-        html += '<div style="font-size:11px;color:var(--text3);">' + t.type + '</div>';
-        html += '</div>';
-        html += '</div>';
+      let html = '';
+      schoolTransactions.slice(0,5).forEach(t => {
+        html += '<tr>';
+        html += '<td>' + t.desc + '</td>';
+        html += '<td><span class="badge ' + (t.type === 'income' ? 'badge-green' : 'badge-red') + '">' + t.type + '</span></td>';
+        html += '<td style="font-weight:600;color:' + (t.type === 'income' ? 'var(--success)' : 'var(--danger)') + ';">' + (t.type === 'income' ? '+' : '-') + '&#8377;' + t.amount.toLocaleString() + '</td>';
+        html += '</tr>';
       });
-      
       recent.innerHTML = html;
     }
   }
@@ -4940,6 +5550,10 @@ async function addStudentFromModal() {
   const phone = document.getElementById('qs-phone').value.trim();
   if(!name||!phone){alert('Name and phone required');return;}
   
+  const amountPaid = parseInt(document.getElementById('qs-paid').value)||0;
+  const paymentMode = document.getElementById('qs-paymode').value;
+  const studentId = document.getElementById('qs-student-id').value.trim();
+  
   try {
     const studentData = {
       name, phone,
@@ -4947,18 +5561,38 @@ async function addStudentFromModal() {
       instructor: document.getElementById('qs-instructor').value,
       classes: 0, 
       totalFee: parseInt(document.getElementById('qs-fee').value)||0,
-      paid: 0, 
+      paid: amountPaid, 
       status: document.getElementById('qs-status').value,
       enrolled: new Date().toISOString().split('T')[0], 
-      dob:'', 
-      address:'', 
-      email:'', 
-      aadhaar:''
+      dob: document.getElementById('qs-dob').value || '',
+      address: document.getElementById('qs-address').value || '',
+      email: document.getElementById('qs-email').value || '',
+      aadhaar: document.getElementById('qs-aadhaar').value || '',
+      studentId: studentId || '',
+      schoolId: currentSchoolId
     };
     
     await FirebaseService.addStudent(studentData);
+    
+    // Add cash flow entry if amount was paid
+    if (amountPaid > 0) {
+      const transactionData = {
+        date: new Date().toISOString().split('T')[0],
+        type: 'income',
+        category: 'Student Fee',
+        desc: `Student enrollment fee: ${name}`,
+        amount: amountPaid,
+        paymentMode: paymentMode,
+        schoolId: currentSchoolId
+      };
+      
+      await FirebaseService.addTransaction(transactionData);
+      addNotification(`Student enrolled and payment recorded: ₹${amountPaid}`,'success');
+    } else {
+      addNotification(`New student enrolled: ${name}`,'success');
+    }
+    
     closeModal('modal-add-student');
-    addNotification(`New student enrolled: ${name}`,'success');
   } catch (error) {
     console.error('Error adding student:', error);
     alert('Error adding student. Please try again.');
@@ -5009,6 +5643,44 @@ function viewStudent(id) {
   const s = data.students.find(x=>x.id===id);
   if(!s) return;
   alert(`Student: ${s.name}\nPhone: ${s.phone}\nVehicle: ${s.vehicle}\nInstructor: ${s.instructor}\nClasses: ${s.classes}/27\nFee: ₹${s.paid}/₹${s.totalFee}\nStatus: ${s.status}`);
+}
+
+// Switch between student form tabs
+function switchStudentTab(tabName, tabElement) {
+  // Hide all tab content
+  document.querySelectorAll('[id^="stab-"]').forEach(tab => {
+    tab.style.display = 'none';
+  });
+  
+  // Remove active class from all tabs
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.classList.remove('active');
+  });
+  
+  // Show selected tab content
+  const selectedTab = document.getElementById('stab-' + tabName);
+  if (selectedTab) {
+    selectedTab.style.display = 'block';
+  }
+  
+  // Add active class to clicked tab
+  if (tabElement) {
+    tabElement.classList.add('active');
+  }
+}
+
+// Toggle service selection
+function toggleService(element, serviceName, fee) {
+  const checkbox = element.querySelector('.svc-check');
+  checkbox.checked = !checkbox.checked;
+  
+  if (checkbox.checked) {
+    element.style.borderColor = 'var(--accent)';
+    element.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+  } else {
+    element.style.borderColor = 'var(--border)';
+    element.style.backgroundColor = '';
+  }
 }
 
 // ============================================================
@@ -5082,7 +5754,8 @@ async function addTransaction() {
       type: document.getElementById('tx-type').value,
       category: document.getElementById('tx-cat').value,
       desc: document.getElementById('tx-desc').value || 'Entry',
-      amount
+      amount,
+      schoolId: currentSchoolId
     };
     
     await FirebaseService.addTransaction(transactionData);
@@ -7522,6 +8195,89 @@ async function clearAllStaffFromFirebase() {
   }
 }
 
+// Repair login access for legacy staff missing userSchools/users docs
+// Run this as owner to fix staff who get "not authorized for this role" on login
+async function repairStaffLoginAccess() {
+  if (!currentSchoolId) {
+    alert('Please select a school first.');
+    return;
+  }
+  if (currentRole !== 'owner' && currentRole !== 'admin') {
+    alert('Only the owner or admin can run this repair.');
+    return;
+  }
+
+  const btn = event.target;
+  btn.textContent = '🔧 Repairing...';
+  btn.disabled = true;
+
+  try {
+    // Read the school doc to get ownerEmail
+    const schoolDoc = await db.collection('schools').doc(currentSchoolId).get();
+    const ownerEmail = schoolDoc.exists ? (schoolDoc.data().ownerEmail || null) : null;
+
+    // Read all staff docs
+    const staffSnap = await db.collection('schools').doc(currentSchoolId).collection('staff').get();
+    if (staffSnap.empty) {
+      alert('No staff found in this school.');
+      btn.textContent = '🔧 Fix Login Access';
+      btn.disabled = false;
+      return;
+    }
+
+    let fixed = 0;
+    let skipped = 0;
+
+    for (const staffDoc of staffSnap.docs) {
+      const s = staffDoc.data();
+      const uid = s.userId || s.firebaseId || staffDoc.id;
+      if (!uid || uid === s.email) { skipped++; continue; } // placeholder UID — can't fix
+
+      const normalizedRole = s.role === 'instructor' ? 'instructor' : 'office';
+
+      // Write /schools/{id}/users/{uid}
+      try {
+        await db.collection('schools').doc(currentSchoolId).collection('users').doc(uid).set({
+          userId: uid,
+          role: normalizedRole,
+          userRole: normalizedRole,
+          name: s.name || '',
+          email: s.email || '',
+          schoolId: currentSchoolId,
+          status: 'active',
+          repairedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (e) {
+        console.warn('Could not write users doc for', uid, ':', e.message);
+      }
+
+      // Write /userSchools/{uid}
+      try {
+        await db.collection('userSchools').doc(uid).set({
+          schoolIds: firebase.firestore.FieldValue.arrayUnion(currentSchoolId),
+          roles: { [currentSchoolId]: normalizedRole },
+          ownerEmails: { [currentSchoolId]: ownerEmail },
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (e) {
+        console.warn('Could not write userSchools doc for', uid, ':', e.message);
+      }
+
+      fixed++;
+    }
+
+    addNotification(`Repair complete: ${fixed} staff fixed, ${skipped} skipped (no UID).`, 'success');
+    alert(`✅ Done! ${fixed} staff member(s) repaired. They can now log in.\n${skipped > 0 ? skipped + ' skipped (no Firebase UID — re-add them).' : ''}`);
+
+  } catch (error) {
+    console.error('Repair error:', error);
+    alert('Repair failed: ' + error.message);
+  }
+
+  btn.textContent = '🔧 Fix Login Access';
+  btn.disabled = false;
+}
+
 // Render staff table
 function renderStaffTable() {
   const tb = document.getElementById('staff-table');
@@ -7620,6 +8376,8 @@ async function addStaffFromModal() {
     const salary = document.getElementById('staff-salary').value;
     const workType = document.getElementById('staff-work-type').value;
     const notes = document.getElementById('staff-notes').value.trim();
+    const password = document.getElementById('staff-password').value;
+    const confirmPassword = document.getElementById('staff-confirm-password').value;
     
     // Validation
     if (!schoolId) {
@@ -7642,9 +8400,43 @@ async function addStaffFromModal() {
       alert('Please enter phone number');
       return;
     }
+    if (!password) {
+      alert('Please enter a password');
+      return;
+    }
+    if (password.length < 6) {
+      alert('Password must be at least 6 characters');
+      return;
+    }
+    if (password !== confirmPassword) {
+      alert('Passwords do not match');
+      return;
+    }
     
-    // Create staff object
+    // Create Firebase Auth user using secondary app to avoid signing out current user
+    let staffUid = null;
+    try {
+      const secondaryApp =
+        firebase.apps.find(a => a.name === 'secondary') ||
+        firebase.initializeApp(firebase.app().options, 'secondary');
+      const secondaryAuth = secondaryApp.auth();
+      const cred = await secondaryAuth.createUserWithEmailAndPassword(email, password);
+      staffUid = cred.user.uid;
+      await secondaryAuth.signOut();
+      console.log('Staff Firebase Auth account created, UID:', staffUid);
+    } catch (authErr) {
+      if (authErr.code === 'auth/email-already-in-use') {
+        alert('This email already has a Firebase account. Please use a different email or contact the administrator.');
+        return;
+      } else {
+        throw authErr;
+      }
+    }
+
+    // Create staff object with Firebase UID
     const staffData = {
+      userId: staffUid,
+      firebaseId: staffUid,
       name,
       email,
       phone,
@@ -7661,19 +8453,61 @@ async function addStaffFromModal() {
       joinedOn: new Date().toLocaleDateString()
     };
     
-    // Save to Firebase
+    // Save to Firebase staff subcollection — use UID as doc ID
     const staffRef = db.collection('schools').doc(schoolId).collection('staff');
-    await staffRef.add(staffData);
-    
+    await staffRef.doc(staffUid).set(staffData);
+
+    const normalizedRole = role === 'instructor' ? 'instructor' : 'office';
+
+    // Write membership doc to schools/{id}/users so isSchoolMember() rule passes for this user.
+    // Requires Firestore rule: allow write: if isSchoolMember(schoolId) on /users/{userId}
+    try {
+      await db.collection('schools').doc(schoolId).collection('users').doc(staffUid).set({
+        userId: staffUid,
+        role: normalizedRole,
+        userRole: normalizedRole,
+        name,
+        email,
+        phone,
+        schoolId,
+        status: 'active',
+        addedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (usersErr) {
+      console.warn('Could not write users membership doc (check Firestore rules):', usersErr.message);
+      // Non-fatal: staff is saved; owner can re-add via Admin Management to fix membership
+    }
+
     // Update local data
     if (!data.staff) data.staff = [];
-    data.staff.push({...staffData, id: staffRef.id});
+    data.staff.push({...staffData, id: staffUid});
+
+    // Write userSchools top-level index so the new staff member can log in
+    let ownerEmail = null;
+    try {
+      const schoolDoc = await db.collection('schools').doc(schoolId).get();
+      if (schoolDoc.exists) ownerEmail = schoolDoc.data().ownerEmail;
+    } catch (e) {
+      console.warn('Could not fetch school for ownerEmail:', e.message);
+    }
+    try {
+      await db.collection('userSchools').doc(staffUid).set({
+        schoolIds: firebase.firestore.FieldValue.arrayUnion(schoolId),
+        roles: { [schoolId]: normalizedRole },
+        ownerEmails: { [schoolId]: ownerEmail },
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    } catch (idxErr) {
+      console.warn('Could not write userSchools index (check Firestore rules):', idxErr.message);
+    }
     
     // Clear form
     document.getElementById('staff-school').value = '';
     document.getElementById('staff-name').value = '';
     document.getElementById('staff-email').value = '';
     document.getElementById('staff-phone').value = '';
+    document.getElementById('staff-password').value = '';
+    document.getElementById('staff-confirm-password').value = '';
     document.getElementById('staff-role').value = 'instructor';
     document.getElementById('staff-department').value = 'training';
     document.getElementById('staff-employee-id').value = '';
@@ -7795,8 +8629,25 @@ async function updateStaff(staffId) {
       updatedAt: new Date().toISOString()
     };
     
-    // Update in Firebase
-    await db.collection('schools').doc(currentSchoolId).collection('staff').doc(staffId).update(updateData);
+    // Update in Firebase — use set+merge so it works even if the doc was briefly absent
+    await db.collection('schools').doc(currentSchoolId).collection('staff').doc(staffId).set(updateData, { merge: true });
+    
+    // Keep the users subcollection in sync (role may have changed)
+    const normalizedRole = role === 'instructor' ? 'instructor' : 'office';
+    try {
+      await db.collection('schools').doc(currentSchoolId).collection('users').doc(staffId).set({
+        role: normalizedRole,
+        userRole: normalizedRole,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      // Also update the userSchools index role
+      await db.collection('userSchools').doc(staffId).set({
+        roles: { [currentSchoolId]: normalizedRole },
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    } catch (syncErr) {
+      console.warn('Role sync to users/userSchools failed (non-fatal):', syncErr.message);
+    }
     
     // Update local data
     const staffIndex = data.staff.findIndex(s => s.id === staffId);
