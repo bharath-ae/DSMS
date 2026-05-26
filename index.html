@@ -227,7 +227,7 @@
 
   /* Cashflow */
   .cf-form { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end; }
-  .cf-summary { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+  .cf-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 14px; margin-bottom: 20px; }
   .cf-box { border-radius: var(--radius); padding: 18px 20px; }
   .cf-income { background: #f0fdf4; border: 1px solid #bbf7d0; }
   .cf-expense { background: #fef2f2; border: 1px solid #fecaca; }
@@ -755,6 +755,23 @@
           <div class="stat-card"><div class="sc-label">DL Tests Scheduled</div><div class="sc-value">0</div><div class="sc-sub">Upcoming tests</div></div>
           <div class="stat-card"><div class="sc-label">Instructors</div><div class="sc-value">0</div><div class="sc-sub">Total instructors</div></div>
         </div>
+        <!-- Income Analytics Row -->
+        <div id="income-analytics-section" style="margin-bottom:18px;">
+          <div class="card" style="margin-bottom:0;">
+            <div class="card-title">📈 Income Analytics
+              <div style="display:flex;gap:6px;">
+                <button class="btn btn-outline btn-sm" onclick="switchIncomeView('daily',this)" id="income-btn-daily">Daily</button>
+                <button class="btn btn-primary btn-sm" onclick="switchIncomeView('weekly',this)" id="income-btn-weekly">Weekly</button>
+                <button class="btn btn-outline btn-sm" onclick="switchIncomeView('monthly',this)" id="income-btn-monthly">Monthly</button>
+                <button class="btn btn-outline btn-sm" onclick="switchIncomeView('yearly',this)" id="income-btn-yearly">Yearly</button>
+              </div>
+            </div>
+            <div id="income-analytics-content">
+              <div style="text-align:center;padding:20px;color:var(--text2);">Loading analytics...</div>
+            </div>
+          </div>
+        </div>
+
         <div class="two-col">
           <div class="card">
             <div class="card-title">Monthly Cash Flow
@@ -800,7 +817,7 @@
       <div class="page" id="page-all-students">
         <div class="page-header">
           <div><h2>All Students</h2><p>Complete student database</p></div>
-          <button class="btn btn-accent" data-action="add_student" onclick="openModal('modal-add-student')">+ Add Student</button>
+          <button class="btn btn-accent" data-action="add_student" onclick="openAddStudentModal()">+ Add Student</button>
         </div>
         <div class="card" style="padding:0;overflow:hidden">
           <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;">
@@ -878,6 +895,7 @@
             <div class="form-group"><label>Assign Instructor</label>
               <select id="s-instructor"><option value="">Select Instructor</option></select>
             </div>
+            <div class="form-group"><label>Total Classes</label><input type="number" id="s-total-classes" placeholder="e.g. 27" value="27" min="1"></div>
             <div class="form-group"><label>Fee Amount (₹)</label><input type="number" id="s-fee" placeholder="Total fee"></div>
             <div class="form-group"><label>Fee Paid (₹)</label><input type="number" id="s-paid" placeholder="Amount paid"></div>
             <div class="form-group"><label>Enrollment Date</label><input type="date" id="s-enroll"></div>
@@ -895,7 +913,7 @@
       <div class="page" id="page-dl-schedule">
         <div class="page-header">
           <div><h2>DL Test Schedule</h2><p>Schedule & notify students for driving licence test</p></div>
-          <button class="btn btn-accent" onclick="openModal('modal-schedule-dl')">+ Schedule Test</button>
+          <button class="btn btn-accent" onclick="openScheduleDLModal()">+ Schedule Test</button>
         </div>
         <div class="alert alert-info">📋 Students who complete minimum 22 classes are eligible for DL test scheduling. Notifications are sent automatically.</div>
         <div class="two-col">
@@ -1417,6 +1435,75 @@
         };
         const navEl = document.getElementById(navMap[id]);
         if (navEl) navEl.classList.add('active');
+        // Auto-render student attendance page with instructor's students
+        if (id === 'page-student-attendance') initStudentAttendancePage();
+        if (id === 'page-attendance') renderSelfAttHistory();
+      }
+
+      function initStudentAttendancePage() {
+        const today = new Date();
+        const dateStr = today.toISOString().split('T')[0];
+        const displayDate = today.toLocaleDateString('en-IN', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+        const displayEl = document.getElementById('student-att-date-display');
+        if (displayEl) displayEl.textContent = 'Marking for ' + displayDate;
+
+        // Get instructor's students (scoped to current school and instructor)
+        const myStudents = (typeof data !== 'undefined' ? data.students || [] : []).filter(s =>
+          (!currentSchoolId || s.schoolId === currentSchoolId) &&
+          s.status !== 'Completed' &&
+          (s.instructorEmail === (currentUser ? currentUser.email : '') ||
+           s.instructor === (currentUser ? (currentUser.displayName || currentUser.email) : ''))
+        );
+
+        const badge = document.getElementById('student-att-count-badge');
+        if (badge) badge.textContent = myStudents.length + ' Students';
+
+        const grid = document.getElementById('student-att-grid');
+        if (!grid) return;
+
+        if (myStudents.length === 0) {
+          grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text2);"><div style="font-size:32px;margin-bottom:10px;">👥</div><div>No active students assigned to you yet.</div></div>';
+          updateAttCounts();
+          return;
+        }
+
+        // Check which students already have attendance saved today
+        const existingAtt = {};
+        if (typeof db !== 'undefined' && currentSchoolId) {
+          Promise.all(myStudents.map(s => {
+            const fid = s.firebaseId || s.id;
+            return db.collection('schools').doc(currentSchoolId).collection('studentAttendance')
+              .doc(dateStr + '_' + fid).get()
+              .then(doc => { if (doc.exists) existingAtt[fid] = doc.data().status; })
+              .catch(()=>{});
+          })).then(() => {
+            buildAttGrid(myStudents, existingAtt, grid);
+          });
+        } else {
+          buildAttGrid(myStudents, {}, grid);
+        }
+        updateAttCounts();
+      }
+
+      function buildAttGrid(students, existingAtt, grid) {
+        grid.innerHTML = students.map(s => {
+          const fid = s.firebaseId || s.id;
+          const initStatus = existingAtt[fid] || '';
+          const cfg = { '':{ cls:'', label:'— Not Marked', color:'var(--text3)', check:'' },
+            'present':{ cls:'present', label:'✅ Present', color:'var(--success)', check:'✅' },
+            'late':   { cls:'late',    label:'⏰ Late',    color:'var(--warning)', check:'⏰' },
+            'absent': { cls:'absent',  label:'❌ Absent',  color:'var(--danger)',  check:'❌' } }[initStatus] ||
+            { cls:'', label:'— Not Marked', color:'var(--text3)', check:'' };
+          const initials = s.name.split(' ').map(x=>x[0]).join('').toUpperCase();
+          return '<div class="att-card ' + cfg.cls + '" data-student="' + s.name + '" data-student-id="' + fid + '" data-status="' + initStatus + '" onclick="cycleStudentAtt(this, '' + s.name.replace(/'/g,"\'") + '')">' +
+            '<div style="font-size:28px;margin-bottom:8px;font-weight:700;color:var(--primary);">' + initials + '</div>' +
+            '<div id="att-check-' + s.name.replace(/\s/g,'_') + '" style="font-size:22px;height:28px;">' + cfg.check + '</div>' +
+            '<div style="font-weight:600;font-size:14px;margin-bottom:4px;">' + s.name + '</div>' +
+            '<div style="font-size:11px;color:var(--text2);margin-bottom:6px;">' + (s.vehicle||'Vehicle') + '</div>' +
+            '<div id="att-status-' + s.name.replace(/\s/g,'_') + '" style="font-size:12px;font-weight:500;color:' + cfg.color + ';">' + cfg.label + '</div>' +
+          '</div>';
+        }).join('');
+        updateAttCounts();
       }
 
       // ============================================================
@@ -1433,42 +1520,95 @@
         openModal('modal-self-att');
       }
 
-      function markSelfPresent() {
+      async function markSelfPresent() {
         const status = document.getElementById('self-att-status').value;
         const time = document.getElementById('self-att-check-in').value;
-        const location = document.getElementById('self-att-location').value || 'DrivePro HQ';
+        const location = document.getElementById('self-att-location').value || 'School';
+        const note = document.getElementById('self-att-note') ? document.getElementById('self-att-note').value : '';
+        const today = new Date().toISOString().split('T')[0];
         selfMarked = true;
 
-        // Update banner
+        // Update banner UI
         const banner = document.getElementById('self-att-banner');
         banner.style.background = 'linear-gradient(135deg, #15803d, #16a34a)';
         document.getElementById('self-att-msg').textContent = status === 'late' ? '⏰ Marked — Late' : '✅ Attendance Marked — Present';
-        document.getElementById('self-att-sub').textContent = `Checked in at ${time} · ${location}`;
+        document.getElementById('self-att-sub').textContent = 'Checked in at ' + time + ' · ' + location;
         const timeBlock = document.getElementById('self-att-time-block');
         timeBlock.style.display = 'block';
         document.getElementById('self-att-time').textContent = time;
 
-        // Update button
         const btn = document.getElementById('mark-self-btn');
-        btn.textContent = '✅ Marked';
-        btn.disabled = true;
-        btn.style.opacity = '0.7';
-
-        // Show next-steps card
+        btn.textContent = '✅ Marked'; btn.disabled = true; btn.style.opacity = '0.7';
         document.getElementById('next-steps-card').style.display = 'block';
 
-        // Update history table
-        const tbody = document.querySelector('#page-attendance .data-table tbody');
-        const todayRow = tbody ? tbody.querySelector('tr:first-child') : null;
-        if (todayRow && todayRow.cells && todayRow.cells.length >= 5) {
-          todayRow.cells[1].textContent = time;
-          todayRow.cells[2].innerHTML = `<span class="badge ${status==='present'?'badge-green':'badge-amber'}">${status==='present'?'Present':'Late'}</span>`;
-          todayRow.cells[3].textContent = location;
-          todayRow.cells[4].textContent = 'Marked today';
+        // Save to Firebase
+        const attEntry = {
+          date: today,
+          time,
+          status,
+          location,
+          note,
+          type: 'Instructor',
+          userName: currentUser ? (currentUser.displayName || currentUser.email) : 'Unknown',
+          userEmail: currentUser ? currentUser.email : '',
+          userId: currentUser ? currentUser.uid : '',
+          schoolId: currentSchoolId || ''
+        };
+
+        try {
+          if (typeof db !== 'undefined' && currentSchoolId) {
+            await db.collection('schools').doc(currentSchoolId).collection('attendance')
+              .doc(today + '_instructor_' + (currentUser ? currentUser.uid : 'unknown'))
+              .set(attEntry);
+          }
+          // Update local attendance history
+          renderSelfAttHistory();
+        } catch(e) {
+          console.warn('Could not save attendance to Firebase:', e.message);
         }
 
         closeModal('modal-self-att');
         showToast('✅ Attendance marked successfully!');
+      }
+
+      async function renderSelfAttHistory() {
+        const tbody = document.getElementById('att-history-body');
+        if (!tbody) return;
+        const today = new Date().toISOString().split('T')[0];
+        const thisMonth = today.slice(0,7);
+        try {
+          let records = [];
+          if (typeof db !== 'undefined' && currentSchoolId && currentUser) {
+            const snap = await db.collection('schools').doc(currentSchoolId).collection('attendance')
+              .where('userEmail','==', currentUser.email)
+              .where('date','>=', thisMonth + '-01')
+              .orderBy('date','desc').limit(30).get();
+            records = snap.docs.map(d => d.data());
+          }
+          let present=0, absent=0, late=0;
+          records.forEach(r => {
+            if(r.status==='present') present++;
+            else if(r.status==='absent') absent++;
+            else if(r.status==='late') late++;
+          });
+          const total = records.length;
+          const rate = total > 0 ? Math.round(((present+late)/total)*100) : 0;
+          const onTime = present;
+          ['stat-days-present','stat-days-absent','stat-att-rate','stat-on-time'].forEach((id,i) => {
+            const el = document.getElementById(id);
+            if(el) el.textContent = [present, absent, rate+'%', onTime][i];
+          });
+          if (records.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text2);">No attendance records yet.</td></tr>';
+            return;
+          }
+          tbody.innerHTML = records.map(r => {
+            const cls = r.status==='present'?'badge-green':r.status==='late'?'badge-amber':'badge-red';
+            return '<tr><td>'+r.date+'</td><td>'+r.time+'</td><td><span class="badge '+cls+'">'+r.status+'</span></td><td>'+r.location+'</td><td>'+(r.note||'—')+'</td></tr>';
+          }).join('');
+        } catch(e) {
+          console.warn('Could not load attendance history:', e.message);
+        }
       }
 
       function completeStep(stepNum) {
@@ -1498,12 +1638,13 @@
         const nextIdx = (attCycle.indexOf(curr) + 1) % attCycle.length;
         const next = attCycle[nextIdx];
         card.dataset.status = next;
-
         const cfg = attConfig[next];
         card.className = 'att-card ' + cfg.cls;
-        document.getElementById('att-status-' + studentName).textContent = cfg.label;
-        document.getElementById('att-status-' + studentName).style.color = cfg.color;
-        document.getElementById('att-check-' + studentName).textContent = cfg.check;
+        const safeKey = studentName.replace(/\s/g,'_');
+        const statusEl = document.getElementById('att-status-' + safeKey);
+        const checkEl  = document.getElementById('att-check-'  + safeKey);
+        if (statusEl) { statusEl.textContent = cfg.label; statusEl.style.color = cfg.color; }
+        if (checkEl)  { checkEl.textContent  = cfg.check; }
         updateAttCounts();
       }
 
@@ -1523,15 +1664,99 @@
         document.getElementById('att-pending-count').textContent = nd;
       }
 
-      function saveStudentAttendance() {
+      async function saveStudentAttendance() {
         const cards = document.querySelectorAll('.att-card[data-student]');
         let hasUnmarked = false;
         cards.forEach(c => { if (!c.dataset.status) hasUnmarked = true; });
-        if (hasUnmarked) {
-          if (!confirm('Some students are not marked. Save anyway?')) return;
+        if (hasUnmarked && !confirm('Some students are not marked. Save anyway?')) return;
+
+        const btn = document.getElementById('save-att-btn');
+        if (btn) { btn.disabled = true; btn.textContent = '💾 Saving…'; }
+
+        const today = new Date().toISOString().split('T')[0];
+        const promises = [];
+        const updatedStudents = [];
+
+        cards.forEach(card => {
+          const studentName = card.dataset.student;
+          const studentId   = card.dataset.studentId;   // firebaseId stored on card
+          const status      = card.dataset.status || 'absent';
+          if (!studentName) return;
+
+          const attRecord = {
+            date: today,
+            studentName,
+            studentId,
+            status,
+            type: 'student',
+            instructorEmail: currentUser ? currentUser.email : '',
+            instructorName: currentUser ? (currentUser.displayName || currentUser.email) : '',
+            schoolId: currentSchoolId || '',
+            savedAt: new Date().toISOString()
+          };
+
+          if (typeof db !== 'undefined' && currentSchoolId) {
+            // Save attendance record
+            promises.push(
+              db.collection('schools').doc(currentSchoolId).collection('studentAttendance')
+                .doc(today + '_' + studentId)
+                .set(attRecord)
+            );
+
+            // Increment class count for present/late students
+            if ((status === 'present' || status === 'late') && studentId) {
+              const student = data.students.find(s => s.firebaseId === studentId);
+              if (student) {
+                const newClasses = (student.classes || 0) + 1;
+                promises.push(
+                  db.collection('schools').doc(currentSchoolId).collection('students')
+                    .doc(studentId).update({ classes: newClasses })
+                );
+                student.classes = newClasses; // update local
+                updatedStudents.push({ name: studentName, classes: newClasses, totalClasses: student.totalClasses || 27 });
+              }
+            }
+          }
+        });
+
+        try {
+          await Promise.all(promises);
+          completeStep(3);
+          showToast('✅ Student attendance saved! Classes updated.');
+          // Show notifications for DL-eligible students
+          updatedStudents.forEach(s => {
+            if (s.classes === 22) addNotification(s.name + ' completed 22 classes — eligible for DL Test!', 'success');
+          });
+          // Refresh log
+          renderStudentAttLog();
+          renderInstructorStudents();
+        } catch(e) {
+          console.error('Error saving student attendance:', e);
+          showToast('⚠ Saved locally. Firebase sync may have failed.');
         }
-        completeStep(3);
-        showToast('✅ Student attendance saved successfully!');
+
+        if (btn) { btn.disabled = false; btn.textContent = '💾 Save Attendance'; }
+      }
+
+      async function renderStudentAttLog() {
+        const tbody = document.getElementById('student-att-log-body');
+        if (!tbody || !currentSchoolId || typeof db === 'undefined') return;
+        try {
+          const snap = await db.collection('schools').doc(currentSchoolId)
+            .collection('studentAttendance')
+            .where('instructorEmail','==', currentUser ? currentUser.email : '')
+            .orderBy('date','desc').limit(30).get();
+          const records = snap.docs.map(d => d.data());
+          if (records.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text2);">No records yet.</td></tr>';
+            return;
+          }
+          tbody.innerHTML = records.map(r => {
+            const cls = r.status==='present'?'badge-green':r.status==='late'?'badge-amber':'badge-red';
+            const student = data.students.find(s => s.firebaseId === r.studentId);
+            return '<tr><td>'+r.date+'</td><td>'+r.studentName+'</td><td><span class="badge '+cls+'">'+r.status+'</span></td><td>'+(student?student.classes:'—')+'</td><td>'+(r.notes||'—')+'</td></tr>';
+          }).join('');
+        } catch(e) { console.warn('Could not load student attendance log:', e.message); }
       }
 
       // ============================================================
@@ -1609,15 +1834,65 @@
         }
       }
 
-      function submitFuelLog() {
+      async function submitFuelLog() {
         const odo = document.getElementById('fuel-odo-before').value;
         const litres = document.getElementById('fuel-litres-new').value;
         const cost = document.getElementById('fuel-cost-new').value;
+        const date = document.getElementById('fuel-date-new').value || new Date().toISOString().split('T')[0];
+        const vehicle = document.getElementById('fuel-vehicle-new') ? document.getElementById('fuel-vehicle-new').value : '';
+        const fuelType = document.getElementById('fuel-type-new') ? document.getElementById('fuel-type-new').value : 'petrol';
+        const notes = document.getElementById('fuel-notes-new') ? document.getElementById('fuel-notes-new').value : '';
+        const odoAfter = document.getElementById('fuel-odo-after').value;
         if (!odo) { alert('Please enter the odometer reading BEFORE refueling'); return; }
         if (!litres || parseFloat(litres) <= 0) { alert('Please enter the number of litres filled'); return; }
         if (!cost || parseFloat(cost) <= 0) { alert('Please enter the amount paid'); return; }
-        closeModal('modal-fuel');
-        showToast('⛽ Fuel log submitted! ₹' + parseFloat(cost).toLocaleString() + ' — ' + litres + 'L');
+
+        try {
+          const fuelEntry = {
+            date,
+            vehicle: vehicle || 'Not specified',
+            litres: parseFloat(litres),
+            cost: parseFloat(cost),
+            km: parseInt(odo) || 0,
+            odoAfter: parseFloat(odoAfter) || 0,
+            fuelType,
+            notes,
+            instructorId: typeof currentUser !== 'undefined' && currentUser ? currentUser.uid || '' : '',
+            instructorEmail: typeof currentUser !== 'undefined' && currentUser ? currentUser.email || '' : '',
+            instructorName: typeof currentUser !== 'undefined' && currentUser ? (currentUser.displayName || currentUser.email || 'Unknown') : 'Unknown',
+            schoolId: typeof currentSchoolId !== 'undefined' ? currentSchoolId || '' : '',
+            submittedAt: new Date().toISOString(),
+            status: 'submitted'
+          };
+
+          if (typeof db !== 'undefined' && typeof currentSchoolId !== 'undefined' && currentSchoolId) {
+            await db.collection('schools').doc(currentSchoolId).collection('fuel').add({
+              ...fuelEntry,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            // Also add as expense transaction for cashflow
+            await db.collection('schools').doc(currentSchoolId).collection('transactions').add({
+              date, type: 'expense', category: 'Petrol',
+              desc: 'Fuel — ' + (vehicle||'Vehicle') + ' by ' + fuelEntry.instructorName,
+              amount: parseFloat(cost), schoolId: currentSchoolId,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          } else {
+            if (typeof data !== 'undefined') {
+              data.fuel = data.fuel || [];
+              data.fuel.unshift({...fuelEntry, id: Date.now().toString()});
+            }
+          }
+
+          closeModal('modal-fuel');
+          showToast('⛽ Fuel log saved! ₹' + parseFloat(cost).toLocaleString() + ' — ' + litres + 'L');
+          // Refresh driver fuel page if visible
+          if (typeof renderDriverFuelPage !== 'undefined') renderDriverFuelPage();
+        } catch(err) {
+          console.error('Fuel log save error:', err);
+          closeModal('modal-fuel');
+          showToast('⛽ Fuel log submitted (saved locally)');
+        }
       }
 
       // ============================================================
@@ -1726,7 +2001,8 @@
             <select id="vehicle-school-filter" onchange="filterVehiclesBySchool()" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: white;">
               <option value="">All Schools</option>
             </select>
-            <button class="btn btn-accent" onclick="refreshVehicles()">🔄 Refresh</button>
+            <button class="btn btn-accent" onclick="openAddVehicleModal()">+ Add Vehicle</button>
+            <button class="btn btn-outline" onclick="refreshVehicles()">🔄 Refresh</button>
           </div>
         </div>
         
@@ -1749,6 +2025,38 @@
       </div>
 
       <!-- OWNER ATTENDANCE PAGE -->
+      <!-- OFFICE SELF-ATTENDANCE PAGE -->
+      <div class="page" id="page-office-attendance">
+        <div class="page-header">
+          <div><h2>✅ My Attendance</h2><p id="office-att-date">Today</p></div>
+          <button class="btn btn-accent" onclick="openOfficeAttModal()" id="office-mark-btn">📍 Mark My Attendance</button>
+        </div>
+        <div class="self-att-banner" id="office-att-banner" style="cursor:default;">
+          <div style="font-size:48px;">👤</div>
+          <div class="self-att-status">
+            <h3 id="office-att-msg">Mark Your Attendance to Begin</h3>
+            <p id="office-att-sub">You haven't marked attendance for today yet.</p>
+          </div>
+          <div id="office-att-time-block" style="text-align:right;display:none;">
+            <div style="font-size:11px;opacity:0.6;margin-bottom:4px;">Marked at</div>
+            <div id="office-att-time" style="font-family:'Syne';font-size:22px;font-weight:700;color:var(--accent);">—</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">📊 My Attendance History (This Month)</div>
+          <div class="stats-grid" style="margin-bottom:16px;">
+            <div class="stat-card green"><div class="sc-label">Present</div><div class="sc-value" style="color:var(--success)" id="office-stat-present">—</div></div>
+            <div class="stat-card red"><div class="sc-label">Absent</div><div class="sc-value" style="color:var(--danger)" id="office-stat-absent">—</div></div>
+            <div class="stat-card accent"><div class="sc-label">Rate</div><div class="sc-value" style="color:var(--primary)" id="office-stat-rate">—</div></div>
+            <div class="stat-card blue"><div class="sc-label">On Time</div><div class="sc-value" style="color:var(--accent2)" id="office-stat-ontime">—</div></div>
+          </div>
+          <table class="data-table">
+            <thead><tr><th>Date</th><th>Check-In</th><th>Status</th><th>Note</th></tr></thead>
+            <tbody id="office-att-history"></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="page" id="page-owner-attendance">
         <div class="page-header">
           <div><h2>Attendance Management</h2><p>Manage attendance for all schools and user types</p></div>
@@ -1889,6 +2197,7 @@
         <div class="form-group"><label>Assign Instructor *</label>
           <select id="qs-instructor"><option value="">-- Select Instructor --</option></select>
         </div>
+        <div class="form-group"><label>Total Classes</label><input type="number" id="qs-total-classes" placeholder="e.g. 27" value="27" min="1"></div>
         <div class="form-group"><label>Total Fee (₹)</label><input type="number" id="qs-fee" placeholder="e.g. 5000"></div>
         <div class="form-group"><label>Amount Paid (₹)</label><input type="number" id="qs-paid" placeholder="e.g. 2500"></div>
         <div class="form-group"><label>Payment Mode</label>
@@ -3163,25 +3472,48 @@ const listeners = [];
 
 // Load initial data from Firebase
 async function loadInitialData() {
+  // Helper: tag incoming items with current school and merge (removes old entries for this school)
+  function mergeSchoolData(existing, incoming, schoolId) {
+    const tagged = incoming.map(item => ({ ...item, schoolId: item.schoolId || schoolId }));
+    const others = (existing || []).filter(item => item.schoolId && item.schoolId !== schoolId);
+    return [...others, ...tagged];
+  }
+  const sid = currentSchoolId;
+
   try {
     // Load data based on user role
     if (currentRole === 'owner') {
-      // Owner loads all data
-      data.students = await FirebaseService.getStudents();
-      data.transactions = await FirebaseService.getTransactions();
-      data.dlTests = await FirebaseService.getDocuments(FirebaseService.dlTestsRef);
-      data.fuel = await FirebaseService.getDocuments(FirebaseService.fuelRef);
-      data.notifications = await FirebaseService.getDocuments(FirebaseService.notificationsRef);
+      // Owner loads all data — scoped to the currently selected school
+      const [students, transactions, dlTests, fuel, notifications] = await Promise.allSettled([
+        FirebaseService.getStudents(),
+        FirebaseService.getTransactions(),
+        FirebaseService.getDocuments(FirebaseService.dlTestsRef),
+        FirebaseService.getDocuments(FirebaseService.fuelRef),
+        FirebaseService.getDocuments(FirebaseService.notificationsRef)
+      ]);
+      if (students.status === 'fulfilled')      data.students      = mergeSchoolData(data.students,      students.value,      sid);
+      if (transactions.status === 'fulfilled')  data.transactions  = mergeSchoolData(data.transactions,  transactions.value,  sid);
+      if (dlTests.status === 'fulfilled')       data.dlTests       = mergeSchoolData(data.dlTests,       dlTests.value,       sid);
+      if (fuel.status === 'fulfilled')          data.fuel          = mergeSchoolData(data.fuel,          fuel.value,          sid);
+      if (notifications.status === 'fulfilled') data.notifications = mergeSchoolData(data.notifications, notifications.value, sid);
     } else if (currentRole === 'office') {
-      // Office staff: load students, transactions, DL tests, attendance, schedule
-      try { data.students = await FirebaseService.getStudents(); } catch(e) { console.warn('office: students load failed:', e.message); }
-      try { data.transactions = await FirebaseService.getTransactions(); } catch(e) { console.warn('office: transactions load failed:', e.message); }
-      try { data.dlTests = await FirebaseService.getDocuments(FirebaseService.dlTestsRef); } catch(e) { console.warn('office: dlTests load failed:', e.message); }
-      try { data.notifications = await FirebaseService.getDocuments(FirebaseService.notificationsRef); } catch(e) { console.warn('office: notifications load failed:', e.message); }
+      const [students, transactions, dlTests, notifications] = await Promise.allSettled([
+        FirebaseService.getStudents(),
+        FirebaseService.getTransactions(),
+        FirebaseService.getDocuments(FirebaseService.dlTestsRef),
+        FirebaseService.getDocuments(FirebaseService.notificationsRef)
+      ]);
+      if (students.status === 'fulfilled')      data.students      = mergeSchoolData(data.students,      students.value,      sid);
+      if (transactions.status === 'fulfilled')  data.transactions  = mergeSchoolData(data.transactions,  transactions.value,  sid);
+      if (dlTests.status === 'fulfilled')       data.dlTests       = mergeSchoolData(data.dlTests,       dlTests.value,       sid);
+      if (notifications.status === 'fulfilled') data.notifications = mergeSchoolData(data.notifications, notifications.value, sid);
     } else if (currentRole === 'instructor') {
-      // Instructor: load their assigned students, fuel, attendance, schedule
-      try { data.students = await FirebaseService.getStudents(); } catch(e) { console.warn('instructor: students load failed:', e.message); }
-      try { data.fuel = await FirebaseService.getDocuments(FirebaseService.fuelRef); } catch(e) { console.warn('instructor: fuel load failed:', e.message); }
+      const [students, fuel] = await Promise.allSettled([
+        FirebaseService.getStudents(),
+        FirebaseService.getDocuments(FirebaseService.fuelRef)
+      ]);
+      if (students.status === 'fulfilled') data.students = mergeSchoolData(data.students, students.value, sid);
+      if (fuel.status === 'fulfilled')     data.fuel     = mergeSchoolData(data.fuel,     fuel.value,     sid);
     }
 
     // Load today's attendance (all roles need this)
@@ -3217,10 +3549,15 @@ function setupRealtimeListeners() {
   listeners.forEach(unsubscribe => unsubscribe());
   listeners.length = 0;
   
-  // Students listener (owner only)
+  // Students listener — only replaces data for currentSchoolId, preserves other schools
   try {
+    const _listenSchoolId = currentSchoolId;
     const studentsUnsubscribe = FirebaseService.onStudentsChange(students => {
-      data.students = students;
+      // Tag each incoming student with the school we were listening to
+      const tagged = students.map(s => ({ ...s, schoolId: s.schoolId || _listenSchoolId }));
+      // Remove stale entries for this school, keep entries from other schools
+      const others = (data.students || []).filter(s => s.schoolId && s.schoolId !== _listenSchoolId);
+      data.students = [...others, ...tagged];
       if (currentPage === 'all-students' || currentPage === 'dashboard' || currentPage === 'my-students') {
         renderStudentsTable();
         renderDashboard();
@@ -3232,11 +3569,14 @@ function setupRealtimeListeners() {
     console.warn('Could not setup students listener:', e.message);
   }
   
-  // Transactions listener (owner and office)
+  // Transactions listener — same school-scoped merge pattern
   if (currentRole === 'owner' || currentRole === 'office') {
     try {
+      const _listenSchoolId = currentSchoolId;
       const transactionsUnsubscribe = FirebaseService.onTransactionsChange(transactions => {
-        data.transactions = transactions;
+        const tagged = transactions.map(t => ({ ...t, schoolId: t.schoolId || _listenSchoolId }));
+        const others = (data.transactions || []).filter(t => t.schoolId && t.schoolId !== _listenSchoolId);
+        data.transactions = [...others, ...tagged];
         if (currentPage === 'cashflow' || currentPage === 'dashboard') {
           renderCashflow();
           renderDashboard();
@@ -3341,8 +3681,8 @@ const navConfig = {
     {section:'Operations', items:[
       {id:'dl-tests',icon:'&#128990;',label:'DL Tests'},
       {id:'notifications',icon:'&#128226;',label:'Notifications'},
-      {id:'attendance',icon:'&#9989;',label:'Attendance Overview'},
-      {id:'owner-attendance',icon:'&#9989;',label:'Attendance Management'},
+      {id:'office-attendance',icon:'&#9989;',label:'My Attendance'},
+      {id:'owner-attendance',icon:'&#128202;',label:'Staff Attendance'},
       {id:'class-schedule',icon:'&#128197;',label:'Class Schedule'},
       {id:'staff-management',icon:'&#128104;',label:'Staff Management'},
     ]},
@@ -3532,7 +3872,7 @@ function hasPageAccess(pageId) {
     ],
     office: [
       'dashboard', 'all-students', 'cashflow', 'reports',
-      'dl-tests', 'notifications', 'attendance', 'class-schedule', 'instructor', 'staff-management', 'owner-attendance'
+      'dl-tests', 'notifications', 'office-attendance', 'owner-attendance', 'class-schedule', 'instructor', 'staff-management'
     ],
     instructor: [
       'dashboard', 'my-students', 'class-schedule', 'attendance', 'petrol'
@@ -4228,70 +4568,67 @@ function navigateTo(pageId) {
 // Filter data based on user role and permissions
 function filterDataByRole(dataType, items) {
   if (!currentRole || !currentUser) return items;
-  
+  if (!Array.isArray(items)) return items;
+
+  // ALWAYS filter by current school first — no item from another school should ever appear
+  let schoolFiltered = items;
+  if (currentSchoolId) {
+    schoolFiltered = items.filter(item => {
+      // Items with no schoolId at all are legacy — include them only if there's only 1 school
+      if (!item.schoolId) return (userSchools || []).length <= 1;
+      return item.schoolId === currentSchoolId;
+    });
+  }
+
   switch (dataType) {
     case 'students':
       if (currentRole === 'owner' || currentRole === 'office') {
-        return items; // Full access
+        return schoolFiltered;
       } else if (currentRole === 'instructor') {
-        // Instructors can only see students assigned to them
-        return items.filter(student => 
-          student.instructorEmail === currentUser.email || 
-          student.instructor === currentUser.email
+        return schoolFiltered.filter(student =>
+          student.instructorEmail === currentUser.email ||
+          student.instructor === currentUser.email ||
+          student.instructor === (currentUser.displayName || '')
         );
       }
       break;
-      
+
     case 'transactions':
       if (currentRole === 'owner' || currentRole === 'office') {
-        return items; // Full access
+        return schoolFiltered;
       } else if (currentRole === 'instructor') {
-        // Instructors can only view transactions (read-only)
-        return items; // Can view but UI will be restricted
+        return schoolFiltered;
       }
       break;
-      
+
     case 'attendance':
       if (currentRole === 'owner' || currentRole === 'office') {
-        return items; // Full access
+        return schoolFiltered;
       } else if (currentRole === 'instructor') {
-        // Instructors can only mark attendance for their students
-        const instructorStudents = data.students.filter(student => 
-          student.instructorEmail === currentUser.email || 
-          student.instructor === currentUser.email
+        const myStudents = (data.students || []).filter(student =>
+          student.schoolId === currentSchoolId &&
+          (student.instructorEmail === currentUser.email ||
+           student.instructor === currentUser.email ||
+           student.instructor === (currentUser.displayName || ''))
         );
-        const instructorStudentIds = instructorStudents.map(s => s.id || s.name);
-        return items.filter(item => 
-          instructorStudentIds.includes(item.studentId || item.studentName)
+        const myStudentIds = myStudents.map(s => s.id || s.name);
+        return schoolFiltered.filter(item =>
+          myStudentIds.includes(item.studentId || item.studentName)
         );
       }
       break;
-      
+
     case 'schedule':
-      if (currentRole === 'owner' || currentRole === 'office') {
-        return items; // Full access
-      } else if (currentRole === 'instructor') {
-        // Instructors can see all schedules but only edit their own
-        return items; // Full view, edit restrictions in UI
-      }
-      break;
-      
+      return schoolFiltered;
+
     case 'fuel':
-      if (currentRole === 'owner') {
-        return items; // Full access
-      } else if (currentRole === 'office') {
-        return items; // Can view all
-      } else if (currentRole === 'instructor') {
-        // Instructors can see all and edit their own entries
-        return items;
-      }
-      break;
-      
+      return schoolFiltered;
+
     default:
-      return items;
+      return schoolFiltered;
   }
-  
-  return items;
+
+  return schoolFiltered;
 }
 
 // Get filtered data for current user
@@ -4317,6 +4654,20 @@ function getFilteredData(dataType) {
 // RENDER ALL DATA
 // ============================================================
 function renderAllData() {
+  // Pre-populate instructor dropdown for static enrollment page
+  const s2 = document.getElementById('s-instructor');
+  if (s2) {
+    s2.innerHTML = '<option value="">Select Instructor</option>';
+    const instructors = (data.staff || []).filter(st => st.role === 'instructor');
+    const adminInst = (data.admins || []).filter(a => a.role === 'instructor');
+    const allInst = instructors.length > 0 ? instructors : adminInst;
+    allInst.forEach(inst => {
+      const opt = document.createElement('option');
+      opt.value = inst.name;
+      opt.textContent = inst.name;
+      s2.appendChild(opt);
+    });
+  }
   renderStudentsTable();
   renderSchedule();
   renderNotifications();
@@ -4362,6 +4713,7 @@ function refreshPage(id) {
   else if(id==='owner-fuel') renderOwnerFuelDashboard();
   else if(id==='vehicles') renderVehicles();
   else if(id==='owner-attendance') renderOwnerAttendance();
+  else if(id==='office-attendance') { renderOfficeAttHistory(); const d=document.getElementById('office-att-date'); if(d) d.textContent='Today — '+new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'}); }
   else if(id==='notifications') renderNotifications();
   else if(id==='reports') renderReport();
   else if(id==='my-students') renderInstructorStudents();
@@ -4372,386 +4724,325 @@ function refreshPage(id) {
 // ============================================================
 // OVERALL VIEW - ALL SCHOOLS
 // ============================================================
-async function renderOverallDashboard() {
-  // Set date
-  const dateElement = document.getElementById('overall-date');
-  if(dateElement) dateElement.textContent = new Date().toLocaleDateString('en-IN',{weekday:'short',year:'numeric',month:'short',day:'numeric'});
-  
-  if (userSchools.length === 0) {
-    const elements = {
-      'total-schools': '0',
-      'total-students-all': '0', 
-      'total-revenue': '0',
-      'total-expenses': '0',
-      'total-instructors': '0',
-      'total-classes': '0'
+// ── helper: fetch one school's data from Firebase ──────────────────────────
+async function fetchSchoolSnapshot(schoolId) {
+  try {
+    const [studentsSnap, txSnap, staffSnap] = await Promise.all([
+      db.collection('schools').doc(schoolId).collection('students').get(),
+      db.collection('schools').doc(schoolId).collection('transactions').get(),
+      db.collection('schools').doc(schoolId).collection('staff').get()
+    ]);
+    return {
+      students:     studentsSnap.docs.map(d => ({ id: d.id, ...d.data(), schoolId })),
+      transactions: txSnap.docs.map(d => ({ id: d.id, ...d.data(), schoolId })),
+      staff:        staffSnap.docs.map(d => ({ id: d.id, ...d.data(), schoolId }))
     };
-    
-    Object.keys(elements).forEach(id => {
-      const element = document.getElementById(id);
-      if(element) element.textContent = elements[id];
-    });
-    
-    const performance = document.getElementById('schools-performance');
-    if(performance) performance.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text2);">No schools available. Create your first school to see overall data.</div>';
+  } catch (e) {
+    console.warn('fetchSchoolSnapshot failed for', schoolId, e.message);
+    return { students: [], transactions: [], staff: [] };
+  }
+}
+
+async function renderOverallDashboard() {
+  const dateElement = document.getElementById('overall-date');
+  if (dateElement) dateElement.textContent = new Date().toLocaleDateString('en-IN',{weekday:'short',year:'numeric',month:'short',day:'numeric'});
+
+  if (userSchools.length === 0) {
+    ['total-schools','total-students-all','total-revenue','total-expenses','total-instructors','total-classes']
+      .forEach(id => { const el = document.getElementById(id); if(el) el.textContent='0'; });
+    const perf = document.getElementById('schools-performance');
+    if (perf) perf.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text2);">No schools found. Create your first school.</div>';
     return;
   }
-  
-  // Calculate overall metrics
-  let totalStudents = 0;
-  let totalRevenue = 0;
-  let totalExpenses = 0;
-  let totalInstructors = 0;
-  let totalClasses = 0;
+
   const thisMonth = new Date().toISOString().slice(0,7);
-  
-  // Collect data from all schools
-  for (const school of userSchools) {
-    // For now, we'll use current school data as example
-    // In a real implementation, you'd fetch data from each school
-    totalStudents += data.students.length;
-    totalRevenue += data.transactions.filter(t => t.type === 'income' && t.date.startsWith(thisMonth)).reduce((s, t) => s + t.amount, 0);
-    totalExpenses += data.transactions.filter(t => t.type === 'expense' && t.date.startsWith(thisMonth)).reduce((s, t) => s + t.amount, 0);
-    totalInstructors += 5; // Example count
-    totalClasses += data.schedule[new Date().toLocaleDateString('en-US', {weekday: 'long'})]?.length || 0;
-  }
-  
-  // Update stats
-  const statsElements = {
-    'total-schools': userSchools.length,
-    'total-students-all': totalStudents,
-    'total-revenue': '0' + totalRevenue.toLocaleString(),
-    'total-expenses': '0' + totalExpenses.toLocaleString(),
-    'total-instructors': totalInstructors,
-    'total-classes': totalClasses
-  };
-  
-  Object.keys(statsElements).forEach(id => {
-    const element = document.getElementById(id);
-    if(element) element.textContent = statsElements[id];
+
+  // Show loading state
+  const perf = document.getElementById('schools-performance');
+  if (perf) perf.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text2);">Loading school data…</div>';
+
+  // Fetch each school independently
+  const snapshots = await Promise.all(userSchools.map(s => fetchSchoolSnapshot(s.id)));
+
+  let totalStudents=0, totalRevenue=0, totalExpenses=0, totalInstructors=0;
+  const perSchool = userSchools.map((school, i) => {
+    const snap = snapshots[i];
+    const students = snap.students.length;
+    const revenue  = snap.transactions.filter(t=>t.type==='income'&&(t.date||'').startsWith(thisMonth)).reduce((s,t)=>s+(t.amount||0),0);
+    const expenses = snap.transactions.filter(t=>t.type==='expense'&&(t.date||'').startsWith(thisMonth)).reduce((s,t)=>s+(t.amount||0),0);
+    const instructors = snap.staff.filter(st=>st.role==='instructor').length;
+    totalStudents += students; totalRevenue += revenue; totalExpenses += expenses; totalInstructors += instructors;
+    return { school, students, revenue, expenses, instructors };
   });
-  
-  // Schools performance table
-  const performance = document.getElementById('schools-performance');
-  if(performance) {
-    let html = '<table class="data-table"><thead><tr><th>School Name</th><th>Students</th><th>Revenue</th><th>Status</th></tr></thead><tbody>';
-    
-    userSchools.forEach(school => {
-      const students = data.students.length; // Example - would be school-specific
-      const revenue = data.transactions.filter(t => t.type === 'income' && t.date.startsWith(thisMonth)).reduce((s, t) => s + t.amount, 0);
-      
-      html += '<tr>';
-      html += '<td><div style="font-weight:500;">' + school.name + '</div></td>';
-      html += '<td>' + students + '</td>';
-      html += '<td>&#8377;' + revenue.toLocaleString() + '</td>';
-      html += '<td><span class="badge badge-green">Active</span></td>';
-      html += '</tr>';
+
+  ['total-schools','total-students-all','total-revenue','total-expenses','total-instructors'].forEach((id,i) => {
+    const val = [userSchools.length, totalStudents, '₹'+totalRevenue.toLocaleString(), '₹'+totalExpenses.toLocaleString(), totalInstructors][i];
+    const el = document.getElementById(id); if(el) el.textContent = val;
+  });
+
+  if (perf) {
+    let html = '<table class="data-table"><thead><tr><th>School</th><th>Students</th><th>Monthly Revenue</th><th>Monthly Expenses</th><th>Net</th><th>Instructors</th></tr></thead><tbody>';
+    perSchool.forEach(({school,students,revenue,expenses,instructors}) => {
+      const net = revenue - expenses;
+      html += `<tr>
+        <td><strong>${school.name}</strong></td>
+        <td>${students}</td>
+        <td style="color:var(--success)">₹${revenue.toLocaleString()}</td>
+        <td style="color:var(--danger)">₹${expenses.toLocaleString()}</td>
+        <td style="color:${net>=0?'var(--success)':'var(--danger)'}">₹${net.toLocaleString()}</td>
+        <td>${instructors}</td>
+      </tr>`;
     });
-    
     html += '</tbody></table>';
-    performance.innerHTML = html;
+    perf.innerHTML = html;
   }
 }
 
 async function renderOverallStudents() {
   const studentsPage = document.getElementById('page-overall-students');
-  if(!studentsPage) {
-    console.error('Overall students page not found!');
-    return;
-  }
-  
-  let html = '<div class="page-header"><h2>All Students</h2><p>Students from all your driving schools</p></div>';
-  
+  if (!studentsPage) return;
+
+  studentsPage.innerHTML = '<div class="page-header"><h2>All Students</h2><p>Students from all your driving schools</p></div><div style="text-align:center;padding:30px;color:var(--text2);">Loading…</div>';
+
   if (userSchools.length === 0) {
-    html += '<div style="text-align:center;padding:40px;color:var(--text2);">No schools available. Create schools to view combined student data.</div>';
-    studentsPage.innerHTML = html;
+    studentsPage.innerHTML = '<div class="page-header"><h2>All Students</h2></div><div style="text-align:center;padding:40px;color:var(--text2);">No schools found.</div>';
     return;
   }
-  
-  // Calculate combined student metrics
-  let totalStudents = 0;
-  let activeStudents = 0;
-  let completedStudents = 0;
-  let pendingStudents = 0;
-  let allStudentsData = [];
-  
-  // For now, we'll use current school data multiplied by number of schools
-  // In a real implementation, you'd fetch data from each school
-  userSchools.forEach(school => {
-    totalStudents += data.students.length;
-    activeStudents += data.students.filter(s => s.status === 'Active').length;
-    completedStudents += data.students.filter(s => s.status === 'Completed').length;
-    pendingStudents += data.students.filter(s => s.status === 'Pending').length;
-    
-    // Add students with school name
-    data.students.forEach(student => {
-      allStudentsData.push({
-        ...student,
-        schoolName: school.name,
-        schoolId: school.id
-      });
-    });
+
+  const snapshots = await Promise.all(userSchools.map(s => fetchSchoolSnapshot(s.id)));
+
+  let allStudents = [];
+  const perSchool = userSchools.map((school, i) => {
+    const students = snapshots[i].students;
+    students.forEach(s => allStudents.push({ ...s, schoolName: school.name }));
+    return {
+      school,
+      total:     students.length,
+      active:    students.filter(s=>s.status==='Active').length,
+      completed: students.filter(s=>s.status==='Completed').length,
+      pending:   students.filter(s=>s.status==='Pending').length,
+      totalFee:  students.reduce((sum,s)=>sum+(s.totalFee||0),0),
+      paid:      students.reduce((sum,s)=>sum+(s.paid||0),0)
+    };
   });
-  
+
+  const totals = perSchool.reduce((acc,s)=>({
+    total:acc.total+s.total, active:acc.active+s.active,
+    completed:acc.completed+s.completed, pending:acc.pending+s.pending,
+    totalFee:acc.totalFee+s.totalFee, paid:acc.paid+s.paid
+  }), {total:0,active:0,completed:0,pending:0,totalFee:0,paid:0});
+
+  allStudents.sort((a,b)=>a.name.localeCompare(b.name));
+
+  let html = '<div class="page-header"><h2>All Students</h2><p>Students from all your driving schools</p></div>';
+
   // Summary cards
-  html += '<div class="stats-grid">';
-  html += '<div class="stat-card accent"><div class="sc-label">Total Students</div><div class="sc-value" style="color:var(--primary)">' + totalStudents + '</div><div class="sc-sub">Across all schools</div></div>';
-  html += '<div class="stat-card blue"><div class="sc-label">Active Learners</div><div class="sc-value" style="color:var(--accent2)">' + activeStudents + '</div><div class="sc-sub">Currently learning</div></div>';
-  html += '<div class="stat-card green"><div class="sc-label">Completed</div><div class="sc-value" style="color:var(--success)">' + completedStudents + '</div><div class="sc-sub">License obtained</div></div>';
-  html += '<div class="stat-card"><div class="sc-label">Pending</div><div class="sc-value">' + pendingStudents + '</div><div class="sc-sub">Awaiting start</div></div>';
-  html += '</div>';
-  
-  // Students table
-  html += '<div class="card"><div class="card-title">All Students</div>';
-  html += '<table class="data-table"><thead><tr><th>Name</th><th>School</th><th>Phone</th><th>Vehicle</th><th>Status</th><th>Classes</th><th>Fee</th><th>Instructor</th></tr></thead><tbody>';
-  
-  // Sort students by name
-  allStudentsData.sort((a, b) => a.name.localeCompare(b.name));
-  
-  allStudentsData.slice(0, 20).forEach(student => {
-    const statusClass = student.status === 'Active' ? 'badge-green' : student.status === 'Completed' ? 'badge-blue' : 'badge-amber';
-    const progressPercent = Math.round((student.classes / 27) * 100);
-    
-    html += '<tr>';
-    html += '<td><div style="display:flex;align-items:center;gap:10px;">';
-    html += '<div class="avatar" style="background:' + (COLORS[student.id % COLORS.length]) + '22;color:' + (COLORS[student.id % COLORS.length]) + ';width:32px;height:32px;font-size:12px;">' + student.name.split(' ').map(x => x[0]).join('') + '</div>';
-    html += '<div><div style="font-weight:500;">' + student.name + '</div><div style="font-size:11px;color:var(--text2);">' + student.phone + '</div></div>';
-    html += '</div></td>';
-    html += '<td><span class="badge badge-gray">' + student.schoolName + '</span></td>';
-    html += '<td>' + student.phone + '</td>';
-    html += '<td><span class="badge badge-gray">' + student.vehicle + '</span></td>';
-    html += '<td><span class="' + statusClass + '">' + student.status + '</span></td>';
-    html += '<td><div style="display:flex;align-items:center;gap:5px;"><div style="width:60px;height:4px;background:var(--border);border-radius:2px;overflow:hidden;"><div style="width:' + progressPercent + '%;height:100%;background:' + (progressPercent >= 80 ? 'var(--success)' : progressPercent >= 50 ? 'var(--warning)' : 'var(--primary)') + ';"></div></div><span style="font-size:11px;color:var(--text3);">' + student.classes + '/27</span></div></td>';
-    html += '<td>&#8377;' + student.totalFee.toLocaleString() + '</td>';
-    html += '<td>' + student.instructor + '</td>';
-    html += '</tr>';
-  });
-  
-  html += '</tbody></table></div>';
-  
+  html += `<div class="stats-grid">
+    <div class="stat-card accent"><div class="sc-label">Total Students</div><div class="sc-value" style="color:var(--primary)">${totals.total}</div><div class="sc-sub">Across all schools</div></div>
+    <div class="stat-card blue"><div class="sc-label">Active</div><div class="sc-value" style="color:var(--accent2)">${totals.active}</div><div class="sc-sub">Currently learning</div></div>
+    <div class="stat-card green"><div class="sc-label">Completed</div><div class="sc-value" style="color:var(--success)">${totals.completed}</div><div class="sc-sub">License obtained</div></div>
+    <div class="stat-card"><div class="sc-label">Pending Balance</div><div class="sc-value" style="color:var(--warning)">₹${(totals.totalFee-totals.paid).toLocaleString()}</div><div class="sc-sub">Yet to collect</div></div>
+  </div>`;
+
   // School-wise breakdown
-  html += '<div class="card"><div class="card-title">School-wise Student Distribution</div>';
-  html += '<table class="data-table"><thead><tr><th>School Name</th><th>Total Students</th><th>Active</th><th>Completed</th><th>Completion Rate</th></tr></thead><tbody>';
-  
-  userSchools.forEach(school => {
-    // Use proportional data based on school
-    const schoolTotal = Math.floor(totalStudents / userSchools.length);
-    const schoolActive = Math.floor(activeStudents / userSchools.length);
-    const schoolCompleted = Math.floor(completedStudents / userSchools.length);
-    const completionRate = schoolTotal > 0 ? Math.round((schoolCompleted / schoolTotal) * 100) : 0;
-    const rateClass = completionRate >= 80 ? 'badge-green' : completionRate >= 60 ? 'badge-amber' : 'badge-red';
-    
-    html += '<tr>';
-    html += '<td><div style="font-weight:500;">' + school.name + '</div></td>';
-    html += '<td>' + schoolTotal + '</td>';
-    html += '<td><span class="badge badge-green">' + schoolActive + '</span></td>';
-    html += '<td><span class="badge badge-blue">' + schoolCompleted + '</span></td>';
-    html += '<td><span class="' + rateClass + '">' + completionRate + '%</span></td>';
-    html += '</tr>';
+  html += '<div class="card"><div class="card-title">School-wise Breakdown</div><table class="data-table"><thead><tr><th>School</th><th>Total</th><th>Active</th><th>Completed</th><th>Total Fee</th><th>Collected</th><th>Pending</th></tr></thead><tbody>';
+  perSchool.forEach(({school,total,active,completed,totalFee,paid})=>{
+    html += `<tr>
+      <td><strong>${school.name}</strong></td><td>${total}</td>
+      <td><span class="badge badge-green">${active}</span></td>
+      <td><span class="badge badge-purple">${completed}</span></td>
+      <td>₹${totalFee.toLocaleString()}</td>
+      <td style="color:var(--success)">₹${paid.toLocaleString()}</td>
+      <td style="color:var(--warning)">₹${(totalFee-paid).toLocaleString()}</td>
+    </tr>`;
   });
-  
   html += '</tbody></table></div>';
-  
+
+  // All students table
+  html += '<div class="card"><div class="card-title">All Students</div><table class="data-table"><thead><tr><th>Name</th><th>School</th><th>Phone</th><th>Vehicle</th><th>Instructor</th><th>Status</th><th>Classes</th><th>Fee</th><th>Paid</th><th>Balance</th></tr></thead><tbody>';
+  allStudents.slice(0,50).forEach(s => {
+    const balance = (s.totalFee||0)-(s.paid||0);
+    const statusCls = s.status==='Active'?'badge-green':s.status==='Completed'?'badge-purple':'badge-amber';
+    html += `<tr>
+      <td><strong>${s.name}</strong><div style="font-size:11px;color:var(--text2)">${s.phone}</div></td>
+      <td><span class="badge badge-gray">${s.schoolName}</span></td>
+      <td>${s.phone}</td>
+      <td>${s.vehicle||'—'}</td>
+      <td>${s.instructor||'—'}</td>
+      <td><span class="badge ${statusCls}">${s.status}</span></td>
+      <td>${s.classes||0}/${s.totalClasses||27}</td>
+      <td>₹${(s.totalFee||0).toLocaleString()}</td>
+      <td style="color:var(--success)">₹${(s.paid||0).toLocaleString()}</td>
+      <td style="color:${balance>0?'var(--danger)':'var(--success)'}">₹${balance.toLocaleString()}</td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+
   studentsPage.innerHTML = html;
 }
 
 async function renderOverallCashflow() {
   const cashflowPage = document.getElementById('page-overall-cashflow');
-  if(!cashflowPage) {
-    console.error('Overall cashflow page not found!');
-    return;
-  }
-  
-  let html = '<div class="page-header"><h2>All Revenue</h2><p>Combined financial data from all schools</p></div>';
-  
+  if (!cashflowPage) return;
+
+  cashflowPage.innerHTML = '<div class="page-header"><h2>All Revenue</h2><p>Combined financial data from all schools</p></div><div style="text-align:center;padding:30px;color:var(--text2);">Loading…</div>';
+
   if (userSchools.length === 0) {
-    html += '<div style="text-align:center;padding:40px;color:var(--text2);">No schools available. Create schools to view combined financial data.</div>';
-    cashflowPage.innerHTML = html;
+    cashflowPage.innerHTML = '<div class="page-header"><h2>All Revenue</h2></div><div style="text-align:center;padding:40px;color:var(--text2);">No schools found.</div>';
     return;
   }
-  
-  // Calculate combined financial metrics
-  let totalIncome = 0;
-  let totalExpense = 0;
-  let allTransactions = [];
+
   const thisMonth = new Date().toISOString().slice(0,7);
-  
-  // For now, we'll use current school data multiplied by number of schools
-  // In a real implementation, you'd fetch data from each school
-  userSchools.forEach(school => {
-    totalIncome += data.transactions.filter(t => t.type === 'income' && t.date.startsWith(thisMonth)).reduce((s, t) => s + t.amount, 0);
-    totalExpense += data.transactions.filter(t => t.type === 'expense' && t.date.startsWith(thisMonth)).reduce((s, t) => s + t.amount, 0);
-    
-    // Add transactions with school name
-    data.transactions.forEach(t => {
-      allTransactions.push({
-        ...t,
-        schoolName: school.name,
-        schoolId: school.id
-      });
-    });
+  const snapshots = await Promise.all(userSchools.map(s => fetchSchoolSnapshot(s.id)));
+
+  let allTransactions = [];
+  const perSchool = userSchools.map((school, i) => {
+    const txs = snapshots[i].transactions;
+    txs.forEach(t => allTransactions.push({ ...t, schoolName: school.name }));
+    const income  = txs.filter(t=>t.type==='income' &&(t.date||'').startsWith(thisMonth)).reduce((s,t)=>s+(t.amount||0),0);
+    const expense = txs.filter(t=>t.type==='expense'&&(t.date||'').startsWith(thisMonth)).reduce((s,t)=>s+(t.amount||0),0);
+    const totalIncome  = txs.filter(t=>t.type==='income' ).reduce((s,t)=>s+(t.amount||0),0);
+    const totalExpense = txs.filter(t=>t.type==='expense').reduce((s,t)=>s+(t.amount||0),0);
+    // pending from students
+    const students = snapshots[i].students;
+    const pending = students.reduce((s,st)=>{const b=(st.totalFee||0)-(st.paid||0);return s+(b>0?b:0);},0);
+    return { school, income, expense, net:income-expense, totalIncome, totalExpense, pending };
   });
-  
-  const netProfit = totalIncome - totalExpense;
-  
-  // Summary cards
-  html += '<div class="stats-grid">';
-  html += '<div class="stat-card accent"><div class="sc-label">Total Income</div><div class="sc-value" style="color:var(--primary)">&#8377;' + totalIncome.toLocaleString() + '</div><div class="sc-sub">All schools this month</div></div>';
-  html += '<div class="stat-card red"><div class="sc-label">Total Expenses</div><div class="sc-value" style="color:var(--danger)">&#8377;' + totalExpense.toLocaleString() + '</div><div class="sc-sub">All schools this month</div></div>';
-  html += '<div class="stat-card green"><div class="sc-label">Net Profit</div><div class="sc-value" style="color:var(--success)">&#8377;' + netProfit.toLocaleString() + '</div><div class="sc-sub">Combined profit</div></div>';
-  html += '<div class="stat-card"><div class="sc-label">Total Schools</div><div class="sc-value">' + userSchools.length + '</div><div class="sc-sub">Active schools</div></div>';
-  html += '</div>';
-  
-  // Transactions table
-  html += '<div class="card"><div class="card-title">All Transactions</div>';
-  html += '<table class="data-table"><thead><tr><th>Date</th><th>School</th><th>Description</th><th>Category</th><th>Type</th><th>Amount</th></tr></thead><tbody>';
-  
-  // Sort all transactions by date
-  allTransactions.sort((a, b) => b.date.localeCompare(a.date));
-  
-  allTransactions.slice(0, 20).forEach(t => {
-    const typeClass = t.type === 'income' ? 'badge-green' : 'badge-red';
-    const amountColor = t.type === 'income' ? 'var(--success)' : 'var(--danger)';
-    const amountPrefix = t.type === 'income' ? '+' : '-';
-    
-    html += '<tr>';
-    html += '<td style="color:var(--text2);font-size:12px;">' + t.date + '</td>';
-    html += '<td><span class="badge badge-gray">' + t.schoolName + '</span></td>';
-    html += '<td>' + t.desc + '</td>';
-    html += '<td><span class="badge badge-gray">' + t.category + '</span></td>';
-    html += '<td><span class="' + typeClass + '">' + t.type + '</span></td>';
-    html += '<td style="font-weight:600;color:' + amountColor + '">' + amountPrefix + '&#8377;' + t.amount.toLocaleString() + '</td>';
-    html += '</tr>';
+
+  const totals = perSchool.reduce((acc,s)=>({
+    income:acc.income+s.income, expense:acc.expense+s.expense,
+    totalIncome:acc.totalIncome+s.totalIncome, totalExpense:acc.totalExpense+s.totalExpense,
+    pending:acc.pending+s.pending
+  }),{income:0,expense:0,totalIncome:0,totalExpense:0,pending:0});
+
+  allTransactions.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+
+  let html = '<div class="page-header"><h2>All Revenue</h2><p>Combined financial data from all schools</p></div>';
+
+  html += `<div class="stats-grid">
+    <div class="stat-card green"><div class="sc-label">This Month Income</div><div class="sc-value" style="color:var(--success)">₹${totals.income.toLocaleString()}</div><div class="sc-sub">All schools</div></div>
+    <div class="stat-card red"><div class="sc-label">This Month Expenses</div><div class="sc-value" style="color:var(--danger)">₹${totals.expense.toLocaleString()}</div><div class="sc-sub">All schools</div></div>
+    <div class="stat-card accent"><div class="sc-label">Net Profit</div><div class="sc-value" style="color:${totals.income-totals.expense>=0?'var(--success)':'var(--danger)'}">₹${(totals.income-totals.expense).toLocaleString()}</div><div class="sc-sub">This month</div></div>
+    <div class="stat-card"><div class="sc-label">Pending Collection</div><div class="sc-value" style="color:var(--warning)">₹${totals.pending.toLocaleString()}</div><div class="sc-sub">From students</div></div>
+  </div>`;
+
+  // Per-school breakdown
+  html += '<div class="card"><div class="card-title">School-wise Financial Performance (This Month)</div><table class="data-table"><thead><tr><th>School</th><th>Income</th><th>Expenses</th><th>Net Profit</th><th>Pending</th></tr></thead><tbody>';
+  perSchool.forEach(({school,income,expense,net,pending})=>{
+    html += `<tr>
+      <td><strong>${school.name}</strong></td>
+      <td style="color:var(--success)">₹${income.toLocaleString()}</td>
+      <td style="color:var(--danger)">₹${expense.toLocaleString()}</td>
+      <td style="color:${net>=0?'var(--success)':'var(--danger)'}">₹${net.toLocaleString()}</td>
+      <td style="color:var(--warning)">₹${pending.toLocaleString()}</td>
+    </tr>`;
   });
-  
   html += '</tbody></table></div>';
-  
-  // School-wise breakdown
-  html += '<div class="card"><div class="card-title">School-wise Performance</div>';
-  html += '<table class="data-table"><thead><tr><th>School Name</th><th>Income</th><th>Expenses</th><th>Net Profit</th><th>Status</th></tr></thead><tbody>';
-  
-  userSchools.forEach(school => {
-    // Use proportional data based on school
-    const schoolIncome = Math.floor(totalIncome / userSchools.length);
-    const schoolExpense = Math.floor(totalExpense / userSchools.length);
-    const schoolProfit = schoolIncome - schoolExpense;
-    const profitClass = schoolProfit >= 0 ? 'badge-green' : 'badge-red';
-    
-    html += '<tr>';
-    html += '<td><div style="font-weight:500;">' + school.name + '</div></td>';
-    html += '<td>&#8377;' + schoolIncome.toLocaleString() + '</td>';
-    html += '<td>&#8377;' + schoolExpense.toLocaleString() + '</td>';
-    html += '<td><span class="' + profitClass + '">&#8377;' + schoolProfit.toLocaleString() + '</span></td>';
-    html += '<td><span class="badge badge-green">Active</span></td>';
-    html += '</tr>';
+
+  // All transactions
+  html += '<div class="card"><div class="card-title">All Transactions</div><table class="data-table"><thead><tr><th>Date</th><th>School</th><th>Description</th><th>Category</th><th>Type</th><th>Amount</th></tr></thead><tbody>';
+  allTransactions.slice(0,50).forEach(t => {
+    const clr = t.type==='income'?'var(--success)':'var(--danger)';
+    const pfx = t.type==='income'?'+':'-';
+    html += `<tr>
+      <td style="color:var(--text2);font-size:12px;">${t.date||''}</td>
+      <td><span class="badge badge-gray">${t.schoolName}</span></td>
+      <td>${t.desc||''}</td>
+      <td><span class="badge badge-gray">${t.category||''}</span></td>
+      <td><span class="badge ${t.type==='income'?'badge-green':'badge-red'}">${t.type}</span></td>
+      <td style="font-weight:600;color:${clr}">${pfx}₹${(t.amount||0).toLocaleString()}</td>
+    </tr>`;
   });
-  
   html += '</tbody></table></div>';
-  
+
   cashflowPage.innerHTML = html;
 }
 
 async function renderOverallReports() {
-  // Find the overall reports page instead of destroying content
   const reportsPage = document.getElementById('page-overall-reports');
-  if(!reportsPage) {
-    console.error('Overall reports page not found!');
-    return;
-  }
-  
-  let html = '<div class="page-header"><h2>All Reports</h2><p>Combined reports from all driving schools</p></div>';
-  
+  if (!reportsPage) return;
+
+  reportsPage.innerHTML = '<div class="page-header"><h2>All Reports</h2><p>Combined reports from all driving schools</p></div><div style="text-align:center;padding:30px;color:var(--text2);">Loading…</div>';
+
   if (userSchools.length === 0) {
-    html += '<div style="text-align:center;padding:40px;color:var(--text2);">No schools available. Create schools to view combined reports.</div>';
-    reportsPage.innerHTML = html;
+    reportsPage.innerHTML = '<div class="page-header"><h2>All Reports</h2></div><div style="text-align:center;padding:40px;color:var(--text2);">No schools found.</div>';
     return;
   }
-  
-  // Calculate combined metrics for reports
-  let totalStudents = 0;
-  let totalRevenue = 0;
-  let totalExpenses = 0;
-  let totalClasses = 0;
-  let completedStudents = 0;
+
   const thisMonth = new Date().toISOString().slice(0,7);
-  
-  // Aggregate data from all schools
-  userSchools.forEach(school => {
-    totalStudents += data.students.length;
-    totalRevenue += data.transactions.filter(t => t.type === 'income' && t.date.startsWith(thisMonth)).reduce((s, t) => s + t.amount, 0);
-    totalExpenses += data.transactions.filter(t => t.type === 'expense' && t.date.startsWith(thisMonth)).reduce((s, t) => s + t.amount, 0);
-    totalClasses += data.students.reduce((sum, s) => sum + s.classes, 0);
-    completedStudents += data.students.filter(s => s.status === 'Completed').length;
+  const snapshots = await Promise.all(userSchools.map(s => fetchSchoolSnapshot(s.id)));
+
+  const perSchool = userSchools.map((school, i) => {
+    const students = snapshots[i].students;
+    const txs      = snapshots[i].transactions;
+    const instructors = snapshots[i].staff.filter(st=>st.role==='instructor').length;
+    const revenue  = txs.filter(t=>t.type==='income' &&(t.date||'').startsWith(thisMonth)).reduce((s,t)=>s+(t.amount||0),0);
+    const expenses = txs.filter(t=>t.type==='expense'&&(t.date||'').startsWith(thisMonth)).reduce((s,t)=>s+(t.amount||0),0);
+    const completed = students.filter(s=>s.status==='Completed').length;
+    const totalClasses = students.reduce((s,st)=>s+(st.classes||0),0);
+    const pending = students.reduce((s,st)=>{const b=(st.totalFee||0)-(st.paid||0);return s+(b>0?b:0);},0);
+    return { school, students:students.length, active:students.filter(s=>s.status==='Active').length, completed, revenue, expenses, net:revenue-expenses, totalClasses, pending, instructors };
   });
-  
-  const netProfit = totalRevenue - totalExpenses;
-  const avgRevenuePerStudent = totalStudents > 0 ? Math.round(totalRevenue / totalStudents) : 0;
-  const completionRate = totalStudents > 0 ? Math.round((completedStudents / totalStudents) * 100) : 0;
-  
-  // Executive Summary
-  html += '<div class="card"><div class="card-title">Executive Summary</div>';
-  html += '<div class="stats-grid">';
-  html += '<div class="stat-card accent"><div class="sc-label">Total Schools</div><div class="sc-value" style="color:var(--primary)">' + userSchools.length + '</div><div class="sc-sub">Active locations</div></div>';
-  html += '<div class="stat-card blue"><div class="sc-label">Total Students</div><div class="sc-value" style="color:var(--accent2)">' + totalStudents + '</div><div class="sc-sub">All enrolled</div></div>';
-  html += '<div class="stat-card green"><div class="sc-label">Monthly Revenue</div><div class="sc-value" style="color:var(--success)">&#8377;' + totalRevenue.toLocaleString() + '</div><div class="sc-sub">All schools</div></div>';
-  html += '<div class="stat-card"><div class="sc-label">Net Profit</div><div class="sc-value" style="color:var(--primary)">&#8377;' + netProfit.toLocaleString() + '</div><div class="sc-sub">This month</div></div>';
-  html += '</div></div>';
-  
-  // Performance Metrics
-  html += '<div class="card"><div class="card-title">Performance Metrics</div>';
-  html += '<div class="stats-grid">';
-  html += '<div class="stat-card"><div class="sc-label">Avg Revenue/Student</div><div class="sc-value">&#8377;' + avgRevenuePerStudent.toLocaleString() + '</div><div class="sc-sub">Per student</div></div>';
-  html += '<div class="stat-card"><div class="sc-label">Completion Rate</div><div class="sc-value">' + completionRate + '%</div><div class="sc-sub">License obtained</div></div>';
-  html += '<div class="stat-card"><div class="sc-label">Total Classes</div><div class="sc-value">' + totalClasses + '</div><div class="sc-sub">Completed</div></div>';
-  html += '<div class="stat-card"><div class="sc-label">Completed</div><div class="sc-value">' + completedStudents + '</div><div class="sc-sub">License holders</div></div>';
-  html += '</div></div>';
-  
-  // School Comparison Table
-  html += '<div class="card"><div class="card-title">School Performance Comparison</div>';
-  html += '<table class="data-table"><thead><tr><th>School Name</th><th>Students</th><th>Revenue</th><th>Expenses</th><th>Profit</th><th>Completion Rate</th><th>Classes</th></tr></thead><tbody>';
-  
-  userSchools.forEach((school, index) => {
-    // Use proportional data
-    const schoolStudents = Math.floor(totalStudents / userSchools.length);
-    const schoolRevenue = Math.floor(totalRevenue / userSchools.length);
-    const schoolExpenses = Math.floor(totalExpenses / userSchools.length);
-    const schoolProfit = schoolRevenue - schoolExpenses;
-    const schoolClasses = Math.floor(totalClasses / userSchools.length);
-    const schoolCompleted = Math.floor(completedStudents / userSchools.length);
-    const schoolCompletionRate = schoolStudents > 0 ? Math.round((schoolCompleted / schoolStudents) * 100) : 0;
-    
-    const profitClass = schoolProfit >= 0 ? 'text-success' : 'text-danger';
-    const rateClass = schoolCompletionRate >= 80 ? 'badge-green' : schoolCompletionRate >= 60 ? 'badge-amber' : 'badge-red';
-    
-    html += '<tr>';
-    html += '<td><div style="font-weight:500;">' + school.name + '</div></td>';
-    html += '<td>' + schoolStudents + '</td>';
-    html += '<td>&#8377;' + schoolRevenue.toLocaleString() + '</td>';
-    html += '<td>&#8377;' + schoolExpenses.toLocaleString() + '</td>';
-    html += '<td style="color:' + profitClass + ';">&#8377;' + schoolProfit.toLocaleString() + '</td>';
-    html += '<td><span class="' + rateClass + '">' + schoolCompletionRate + '%</span></td>';
-    html += '<td>' + schoolClasses + '</td>';
-    html += '</tr>';
+
+  const totals = perSchool.reduce((acc,s)=>({
+    students:acc.students+s.students, active:acc.active+s.active,
+    completed:acc.completed+s.completed, revenue:acc.revenue+s.revenue,
+    expenses:acc.expenses+s.expenses, totalClasses:acc.totalClasses+s.totalClasses,
+    pending:acc.pending+s.pending, instructors:acc.instructors+s.instructors
+  }),{students:0,active:0,completed:0,revenue:0,expenses:0,totalClasses:0,pending:0,instructors:0});
+
+  const completionRate = totals.students > 0 ? Math.round((totals.completed/totals.students)*100) : 0;
+  const avgRevPerStudent = totals.students > 0 ? Math.round(totals.revenue/totals.students) : 0;
+  const netProfit = totals.revenue - totals.expenses;
+  const margin = totals.revenue > 0 ? Math.round((netProfit/totals.revenue)*100) : 0;
+
+  let html = '<div class="page-header"><h2>All Reports</h2><p>Combined reports from all driving schools</p></div>';
+
+  html += `<div class="stats-grid">
+    <div class="stat-card accent"><div class="sc-label">Total Schools</div><div class="sc-value" style="color:var(--primary)">${userSchools.length}</div></div>
+    <div class="stat-card blue"><div class="sc-label">Total Students</div><div class="sc-value" style="color:var(--accent2)">${totals.students}</div></div>
+    <div class="stat-card green"><div class="sc-label">Monthly Revenue</div><div class="sc-value" style="color:var(--success)">₹${totals.revenue.toLocaleString()}</div></div>
+    <div class="stat-card"><div class="sc-label">Net Profit</div><div class="sc-value" style="color:${netProfit>=0?'var(--success)':'var(--danger)'}">₹${netProfit.toLocaleString()}</div></div>
+    <div class="stat-card"><div class="sc-label">Completion Rate</div><div class="sc-value">${completionRate}%</div></div>
+    <div class="stat-card"><div class="sc-label">Pending Collection</div><div class="sc-value" style="color:var(--warning)">₹${totals.pending.toLocaleString()}</div></div>
+  </div>`;
+
+  html += '<div class="card"><div class="card-title">School Performance Comparison</div><table class="data-table"><thead><tr><th>School</th><th>Students</th><th>Active</th><th>Completed</th><th>Instructors</th><th>Revenue</th><th>Expenses</th><th>Net</th><th>Completion%</th><th>Pending</th></tr></thead><tbody>';
+  perSchool.forEach(s=>{
+    const rate = s.students>0?Math.round((s.completed/s.students)*100):0;
+    const rateCls = rate>=80?'badge-green':rate>=60?'badge-amber':'badge-red';
+    html += `<tr>
+      <td><strong>${s.school.name}</strong></td>
+      <td>${s.students}</td>
+      <td><span class="badge badge-green">${s.active}</span></td>
+      <td><span class="badge badge-purple">${s.completed}</span></td>
+      <td>${s.instructors}</td>
+      <td style="color:var(--success)">₹${s.revenue.toLocaleString()}</td>
+      <td style="color:var(--danger)">₹${s.expenses.toLocaleString()}</td>
+      <td style="color:${s.net>=0?'var(--success)':'var(--danger)'}">₹${s.net.toLocaleString()}</td>
+      <td><span class="badge ${rateCls}">${rate}%</span></td>
+      <td style="color:var(--warning)">₹${s.pending.toLocaleString()}</td>
+    </tr>`;
   });
-  
   html += '</tbody></table></div>';
-  
-  // Growth Insights
-  html += '<div class="card"><div class="card-title">Business Insights</div>';
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">';
-  html += '<div><h4 style="color:var(--primary);margin-bottom:10px;">Revenue Analysis</h4>';
-  html += '<p style="color:var(--text2);line-height:1.5;">Total monthly revenue of &#8377;' + totalRevenue.toLocaleString() + ' across ' + userSchools.length + ' schools. Average revenue per school: &#8377;' + Math.floor(totalRevenue / userSchools.length).toLocaleString() + '</p></div>';
-  html += '<div><h4 style="color:var(--primary);margin-bottom:10px;">Student Performance</h4>';
-  html += '<p style="color:var(--text2);line-height:1.5;">Overall completion rate of ' + completionRate + '% with ' + completedStudents + ' students having obtained licenses. Total of ' + totalClasses + ' classes conducted.</p></div>';
-  html += '</div>';
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">';
-  html += '<div><h4 style="color:var(--primary);margin-bottom:10px;">Profitability</h4>';
-  html += '<p style="color:var(--text2);line-height:1.5;">Net profit of &#8377;' + netProfit.toLocaleString() + ' this month. Profit margin: ' + totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0 + '% of revenue.</p></div>';
-  html += '<div><h4 style="color:var(--primary);margin-bottom:10px;">Growth Opportunity</h4>';
-  html += '<p style="color:var(--text2);line-height:1.5;">Average revenue per student is &#8377;' + avgRevenuePerStudent.toLocaleString() + '. Focus on increasing enrollment and completion rates for growth.</p></div>';
-  html += '</div>';
-  html += '</div>';
-  
+
+  html += `<div class="card"><div class="card-title">Business Insights</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+      <div style="background:var(--surface2);padding:16px;border-radius:10px;">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">Avg Revenue / Student</div>
+        <div style="font-size:22px;font-weight:700;font-family:'Syne'">₹${avgRevPerStudent.toLocaleString()}</div>
+      </div>
+      <div style="background:var(--surface2);padding:16px;border-radius:10px;">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">Profit Margin</div>
+        <div style="font-size:22px;font-weight:700;font-family:'Syne';color:${margin>=0?'var(--success)':'var(--danger)'}">${margin}%</div>
+      </div>
+      <div style="background:var(--surface2);padding:16px;border-radius:10px;">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">Total Classes Done</div>
+        <div style="font-size:22px;font-weight:700;font-family:'Syne'">${totals.totalClasses}</div>
+      </div>
+    </div>
+  </div>`;
+
   reportsPage.innerHTML = html;
 }
 
@@ -5280,7 +5571,14 @@ async function selectSchoolForView(schoolId, schoolName) {
   // Set the current school
   FirebaseService.setSchool(schoolId);
   currentSchoolId = schoolId;
-  
+
+  // Clear only this school's stale data before reloading (other schools kept intact)
+  data.students     = (data.students||[]).filter(s => s.schoolId && s.schoolId !== schoolId);
+  data.transactions = (data.transactions||[]).filter(t => t.schoolId && t.schoolId !== schoolId);
+  data.dlTests      = (data.dlTests||[]).filter(t => t.schoolId && t.schoolId !== schoolId);
+  data.fuel         = (data.fuel||[]).filter(t => t.schoolId && t.schoolId !== schoolId);
+  data.staff        = [];
+
   // Initialize Firebase data for the selected school
   try {
     await loadInitialData();
@@ -5288,7 +5586,6 @@ async function selectSchoolForView(schoolId, schoolName) {
     renderAllData();
   } catch (error) {
     console.error('Error loading school data:', error);
-    // Continue with empty data if Firebase fails
   }
   
   // Update navigation to show school-specific sections
@@ -5394,10 +5691,10 @@ function renderDashboard() {
   const thisMonth = new Date().toISOString().slice(0,7);
   
   // Filter data by school
-  const schoolStudents = data.students.filter(s => s.schoolId === currentSchoolId);
-  const schoolTransactions = data.transactions.filter(t => t.schoolId === currentSchoolId);
-  const schoolDLTests = data.dlTests.filter(t => t.schoolId === currentSchoolId);
-  const schoolSchedule = data.schedule[new Date().toLocaleDateString('en-US', {weekday: 'long'})]?.filter(s => s.schoolId === currentSchoolId) || [];
+  const schoolStudents = data.students.filter(s => !currentSchoolId || s.schoolId === currentSchoolId);
+  const schoolTransactions = data.transactions.filter(t => !currentSchoolId || t.schoolId === currentSchoolId);
+  const schoolDLTests = data.dlTests.filter(t => !currentSchoolId || t.schoolId === currentSchoolId);
+  const schoolSchedule = data.schedule[new Date().toLocaleDateString('en-US', {weekday: 'long'})]?.filter(s => !currentSchoolId || s.schoolId === currentSchoolId) || [];
   const schoolAttendance = data.attendance[today] || {};
   const schoolAttendanceRecords = Object.values(schoolAttendance).filter(a => a.schoolId === currentSchoolId);
   
@@ -5474,6 +5771,9 @@ function renderDashboard() {
     </div>
   `).join('');
   
+  // Render income analytics
+  setTimeout(renderIncomeAnalytics, 100);
+
   // Recent transactions for this school
   const recent = document.getElementById('recent-tx');
   if(recent) {
@@ -5513,7 +5813,7 @@ function renderStudentsTable(filter='', statusFilter='') {
   tb.innerHTML = rows.map(s => `
     <tr>
       <td><div style="display:flex;align-items:center;gap:10px;">
-        <div class="avatar" style="background:${COLORS[s.id%COLORS.length]}22;color:${COLORS[s.id%COLORS.length]};">${s.name.split(' ').map(x=>x[0]).join('')}</div>
+        <div class="avatar" style="background:${COLORS[(typeof s.id==='number'?s.id:(s.name||'').charCodeAt(0)||0)%COLORS.length]}22;color:${COLORS[(typeof s.id==='number'?s.id:(s.name||'').charCodeAt(0)||0)%COLORS.length]};">${s.name.split(' ').map(x=>x[0]).join('')}</div>
         <div><div style="font-weight:500">${s.name}</div><div style="font-size:11px;color:var(--text2)">${s.phone}</div></div>
       </div></td>
       <td>${s.phone}</td>
@@ -5521,15 +5821,15 @@ function renderStudentsTable(filter='', statusFilter='') {
       <td>${s.instructor}</td>
       <td>
         <div style="display:flex;align-items:center;gap:6px;">
-          <span style="font-size:12px;">${s.classes}/27</span>
+          <span style="font-size:12px;">${s.classes}/${s.totalClasses||27}</span>
           <div class="progress-bar" style="width:60px;">
-            <div class="progress-fill" style="width:${Math.round(s.classes/27*100)}%;background:${s.classes>=22?'var(--success)':'var(--accent2)'}"></div>
+            <div class="progress-fill" style="width:${Math.min(100,Math.round(s.classes/(s.totalClasses||27)*100))}%;background:${s.classes>=(s.totalClasses||27)?'var(--success)':'var(--accent2)'}"></div>
           </div>
         </div>
       </td>
       <td><span class="badge ${s.status==='Active'?'badge-green':s.status==='Completed'?'badge-purple':'badge-amber'}">${s.status}</span></td>
       <td>
-        <button class="btn btn-outline btn-sm" onclick="viewStudent(${s.id})">View</button>
+        <button class="btn btn-outline btn-sm" onclick="viewStudent('${s.firebaseId||s.id}')">View</button>
       </td>
     </tr>
   `).join('');
@@ -5539,31 +5839,53 @@ function filterStudents(val, status='') {
   renderStudentsTable(val, status);
 }
 
+function openAddStudentModal() {
+  const populateInstructorDropdown = (selId) => {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">-- Select Instructor --</option>';
+    const instructors = (data.staff || []).filter(s => s.role === 'instructor');
+    const adminInstructors = (data.admins || []).filter(a => a.role === 'instructor');
+    const allInstructors = instructors.length > 0 ? instructors : adminInstructors;
+    if (allInstructors.length === 0) {
+      sel.innerHTML += '<option value="" disabled>No instructors found</option>';
+    } else {
+      allInstructors.forEach(inst => {
+        const opt = document.createElement('option');
+        opt.value = inst.name;
+        opt.textContent = inst.name + (inst.phone ? ' — ' + inst.phone : '');
+        sel.appendChild(opt);
+      });
+    }
+  };
+  populateInstructorDropdown('qs-instructor');
+  openModal('modal-add-student');
+}
+
 async function addStudentFromModal() {
-  // Check if user has permission to add students
   if (!hasActionPermission('add_student')) {
     alert('You do not have permission to add students.');
     return;
   }
-  
   const name = document.getElementById('qs-name').value.trim();
   const phone = document.getElementById('qs-phone').value.trim();
   if(!name||!phone){alert('Name and phone required');return;}
-  
   const amountPaid = parseInt(document.getElementById('qs-paid').value)||0;
   const paymentMode = document.getElementById('qs-paymode').value;
   const studentId = document.getElementById('qs-student-id').value.trim();
-  
+  const totalClasses = parseInt(document.getElementById('qs-total-classes') && document.getElementById('qs-total-classes').value) || 27;
   try {
     const studentData = {
       name, phone,
       vehicle: document.getElementById('qs-vehicle').value,
       instructor: document.getElementById('qs-instructor').value,
-      classes: 0, 
+      classes: 0,
+      totalClasses,
       totalFee: parseInt(document.getElementById('qs-fee').value)||0,
-      paid: amountPaid, 
+      paid: amountPaid,
+      installments: amountPaid > 0 ? [{ date: new Date().toISOString().split('T')[0], amount: amountPaid, mode: paymentMode, note: 'Initial payment' }] : [],
       status: document.getElementById('qs-status').value,
-      enrolled: new Date().toISOString().split('T')[0], 
+      enrolled: new Date().toISOString().split('T')[0],
       dob: document.getElementById('qs-dob').value || '',
       address: document.getElementById('qs-address').value || '',
       email: document.getElementById('qs-email').value || '',
@@ -5608,14 +5930,17 @@ async function enrollStudent() {
   }
   
   try {
+    const paidAmt = parseInt(document.getElementById('s-paid').value)||0;
     const studentData = {
       name, phone,
       email: document.getElementById('s-email').value,
       vehicle: document.getElementById('s-vehicle').value,
       instructor: document.getElementById('s-instructor').value,
       classes: 0,
+      totalClasses: parseInt(document.getElementById('s-total-classes') && document.getElementById('s-total-classes').value) || 27,
       totalFee: parseInt(document.getElementById('s-fee').value)||0,
-      paid: parseInt(document.getElementById('s-paid').value)||0,
+      paid: paidAmt,
+      installments: paidAmt > 0 ? [{ date: new Date().toISOString().split('T')[0], amount: paidAmt, mode: 'Cash', note: 'Initial payment' }] : [],
       status: 'Active',
       enrolled: document.getElementById('s-enroll').value || new Date().toISOString().split('T')[0],
       dob: document.getElementById('s-dob').value,
@@ -5639,10 +5964,233 @@ function clearEnrollForm() {
   });
 }
 
-function viewStudent(id) {
-  const s = data.students.find(x=>x.id===id);
-  if(!s) return;
-  alert(`Student: ${s.name}\nPhone: ${s.phone}\nVehicle: ${s.vehicle}\nInstructor: ${s.instructor}\nClasses: ${s.classes}/27\nFee: ₹${s.paid}/₹${s.totalFee}\nStatus: ${s.status}`);
+async function viewStudent(id) {
+  // id can be local numeric id OR firebaseId string
+  let s = data.students.find(x => x.firebaseId === id || String(x.id) === String(id));
+  
+  // If not found locally or we want fresh data, fetch from Firebase
+  if (!s && currentSchoolId && typeof db !== 'undefined') {
+    try {
+      const doc = await db.collection('schools').doc(currentSchoolId).collection('students').doc(id).get();
+      if (doc.exists) {
+        s = { ...doc.data(), firebaseId: doc.id, id: doc.id };
+      }
+    } catch(e) {
+      console.warn('Could not fetch student from Firebase:', e.message);
+    }
+  }
+  
+  if (!s) {
+    showToast('⚠ Student not found'); return;
+  }
+  openStudentDetailModal(s);
+}
+
+function openStudentDetailModal(s) {
+  // Remove old modal if exists
+  const old = document.getElementById('modal-student-detail');
+  if (old) old.remove();
+
+  const totalFee = s.totalFee || 0;
+  const paid = s.paid || 0;
+  const balance = totalFee - paid;
+  const pct = totalFee > 0 ? Math.round((paid/totalFee)*100) : 0;
+
+  // Build installments HTML
+  const installments = s.installments || [];
+  const installHTML = installments.length > 0
+    ? installments.map((inst,i) => `
+        <tr>
+          <td style="font-size:12px;color:var(--text2);">${inst.date}</td>
+          <td style="font-weight:600;color:var(--success);">₹${(inst.amount||0).toLocaleString()}</td>
+          <td style="font-size:12px;">${inst.mode || 'Cash'}</td>
+          <td style="font-size:12px;color:var(--text2);">${inst.note || '—'}</td>
+        </tr>`).join('')
+    : '<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--text2);">No installments recorded yet</td></tr>';
+
+  const modal = document.createElement('div');
+  modal.id = 'modal-student-detail';
+  modal.className = 'modal-overlay open';
+  modal.innerHTML = `
+  <div class="modal" style="width:680px;max-width:96vw;max-height:90vh;overflow-y:auto;">
+    <div class="modal-header">
+      <h3>👤 ${s.name}</h3>
+      <button class="modal-close" onclick="document.getElementById('modal-student-detail').remove()">✕</button>
+    </div>
+
+    <!-- Basic Info -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;">
+      <div style="background:var(--surface2);border-radius:10px;padding:14px 16px;">
+        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">📋 Personal</div>
+        <div style="font-size:13px;line-height:2;">
+          <span style="color:var(--text2);">Phone:</span> <strong>${s.phone}</strong><br>
+          <span style="color:var(--text2);">Email:</span> <strong>${s.email || '—'}</strong><br>
+          <span style="color:var(--text2);">DOB:</span> <strong>${s.dob || '—'}</strong><br>
+          <span style="color:var(--text2);">Aadhaar:</span> <strong>${s.aadhaar || '—'}</strong><br>
+          <span style="color:var(--text2);">Address:</span> <strong>${s.address || '—'}</strong>
+        </div>
+      </div>
+      <div style="background:var(--surface2);border-radius:10px;padding:14px 16px;">
+        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">🚗 Course</div>
+        <div style="font-size:13px;line-height:2;">
+          <span style="color:var(--text2);">Vehicle:</span> <strong>${s.vehicle}</strong><br>
+          <span style="color:var(--text2);">Instructor:</span> <strong>${s.instructor || '—'}</strong><br>
+          <span style="color:var(--text2);">Enrolled:</span> <strong>${s.enrolled || '—'}</strong><br>
+          <span style="color:var(--text2);">Status:</span> <span class="badge ${s.status==='Active'?'badge-green':s.status==='Completed'?'badge-purple':'badge-amber'}">${s.status}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Classes Progress -->
+    <div style="background:var(--surface2);border-radius:10px;padding:14px 16px;margin-bottom:18px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;">📚 Classes Progress</div>
+        <strong style="font-size:15px;">${s.classes || 0} / ${s.totalClasses || 27}</strong>
+      </div>
+      <div class="progress-bar" style="height:10px;">
+        <div class="progress-fill" style="width:${Math.min(100,Math.round(((s.classes||0)/(s.totalClasses||27))*100))}%;background:${(s.classes||0)>=(s.totalClasses||27)?'var(--success)':'var(--accent2)'}"></div>
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-top:6px;">${Math.min(100,Math.round(((s.classes||0)/(s.totalClasses||27))*100))}% complete · ${Math.max(0,(s.totalClasses||27)-(s.classes||0))} classes remaining</div>
+    </div>
+
+    <!-- Fee Summary -->
+    <div style="background:var(--surface2);border-radius:10px;padding:14px 16px;margin-bottom:18px;">
+      <div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">💰 Fee Details</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">
+        <div style="background:white;border-radius:8px;padding:12px;text-align:center;border:1px solid var(--border);">
+          <div style="font-size:11px;color:var(--text2);">Total Fee</div>
+          <div style="font-size:18px;font-weight:700;font-family:'Syne';">₹${totalFee.toLocaleString()}</div>
+        </div>
+        <div style="background:#f0fdf4;border-radius:8px;padding:12px;text-align:center;border:1px solid #bbf7d0;">
+          <div style="font-size:11px;color:var(--text2);">Paid</div>
+          <div style="font-size:18px;font-weight:700;font-family:'Syne';color:var(--success);">₹${paid.toLocaleString()}</div>
+        </div>
+        <div style="background:${balance>0?'#fef2f2':'#f0fdf4'};border-radius:8px;padding:12px;text-align:center;border:1px solid ${balance>0?'#fecaca':'#bbf7d0'};">
+          <div style="font-size:11px;color:var(--text2);">Balance Due</div>
+          <div style="font-size:18px;font-weight:700;font-family:'Syne';color:${balance>0?'var(--danger)':'var(--success)'};">₹${balance.toLocaleString()}</div>
+        </div>
+      </div>
+      <div style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>Payment Progress</span><span>${pct}%</span></div>
+        <div class="progress-bar" style="height:8px;">
+          <div class="progress-fill" style="width:${pct}%;background:${pct>=100?'var(--success)':pct>=50?'var(--accent2)':'var(--warning)'}"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Installment History -->
+    <div style="margin-bottom:18px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-family:'Syne';font-size:14px;font-weight:600;">💳 Installment History</div>
+        ${balance > 0 ? `<button class="btn btn-accent btn-sm" onclick="openAddInstallmentForm('${s.id}')">+ Add Installment</button>` : '<span class="badge badge-green">✓ Fully Paid</span>'}
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Date</th><th>Amount</th><th>Mode</th><th>Note</th></tr></thead>
+        <tbody id="installment-list-${s.id}">${installHTML}</tbody>
+      </table>
+    </div>
+
+    <!-- Add Installment Form (hidden by default) -->
+    <div id="add-inst-form-${s.id}" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:13px;font-weight:600;color:var(--primary);margin-bottom:12px;">Add New Installment</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Date *</label><input type="date" id="inst-date-${s.id}" value="${new Date().toISOString().split('T')[0]}"></div>
+        <div class="form-group"><label>Amount (₹) *</label><input type="number" id="inst-amount-${s.id}" placeholder="Enter amount" max="${balance}"></div>
+        <div class="form-group"><label>Payment Mode</label>
+          <select id="inst-mode-${s.id}"><option>Cash</option><option>UPI</option><option>Bank Transfer</option><option>Cheque</option></select>
+        </div>
+        <div class="form-group"><label>Note</label><input type="text" id="inst-note-${s.id}" placeholder="Optional note"></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:12px;">
+        <button class="btn btn-success btn-sm" onclick="saveInstallment('${s.id}')">✓ Save</button>
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('add-inst-form-${s.id}').style.display='none'">Cancel</button>
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-top:8px;">Remaining balance: ₹${balance.toLocaleString()}</div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--border);padding-top:16px;">
+      <button class="btn btn-outline" onclick="document.getElementById('modal-student-detail').remove()">Close</button>
+    </div>
+  </div>`;
+
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  // Load attendance stats for this student
+  loadStudentAttendanceStats(s.firebaseId || s.id);
+}
+
+async function loadStudentAttendanceStats(firebaseId) {
+  // Load student attendance history and update any stats panels in the modal
+  if (!currentSchoolId || !firebaseId || typeof db === 'undefined') return;
+  try {
+    const snap = await db.collection('schools').doc(currentSchoolId)
+      .collection('studentAttendance')
+      .where('studentId', '==', String(firebaseId))
+      .orderBy('date','desc').limit(30).get();
+    const records = snap.docs.map(d => d.data());
+    // Could inject into modal here if we add an attendance section — placeholder for future
+  } catch(e) { /* non-fatal */ }
+}
+
+function openAddInstallmentForm(studentId) {
+  const form = document.getElementById('add-inst-form-' + studentId);
+  if (form) form.style.display = 'block';
+}
+
+async function saveInstallment(studentId) {
+  const s = data.students.find(x => x.id == studentId || x.id === studentId);
+  if (!s) return;
+
+  const date = document.getElementById('inst-date-' + studentId)?.value;
+  const amount = parseFloat(document.getElementById('inst-amount-' + studentId)?.value || '0');
+  const mode = document.getElementById('inst-mode-' + studentId)?.value || 'Cash';
+  const note = document.getElementById('inst-note-' + studentId)?.value || '';
+
+  if (!date || amount <= 0) { alert('Please enter date and valid amount'); return; }
+
+  const totalFee = s.totalFee || 0;
+  const currentPaid = s.paid || 0;
+  const balance = totalFee - currentPaid;
+
+  if (amount > balance) { alert(`Amount cannot exceed remaining balance of ₹${balance.toLocaleString()}`); return; }
+
+  // Update student installments
+  if (!s.installments) s.installments = [];
+  s.installments.push({ date, amount, mode, note });
+  s.paid = currentPaid + amount;
+
+  const firebaseDocId = s.firebaseId || (typeof studentId === 'string' && studentId.length > 10 ? studentId : null);
+  try {
+    // Save to Firebase
+    if (currentSchoolId && firebaseDocId) {
+      await db.collection('schools').doc(currentSchoolId).collection('students').doc(firebaseDocId).update({
+        paid: s.paid,
+        installments: s.installments
+      });
+    }
+
+    // Add to cashflow — scoped to this school
+    if (currentSchoolId) {
+      await FirebaseService.addTransaction({
+        date,
+        type: 'income',
+        category: 'Student Fee',
+        desc: 'Installment from ' + s.name + ' (' + mode + ')',
+        amount,
+        paymentMode: mode,
+        studentId: firebaseDocId || studentId,
+        schoolId: currentSchoolId
+      });
+    }
+
+    addNotification(`Installment of ₹${amount.toLocaleString()} saved for ${s.name}`, 'success');
+    // Reopen modal with updated data
+    document.getElementById('modal-student-detail')?.remove();
+    openStudentDetailModal(s);
+  } catch (err) {
+    console.error('Error saving installment:', err);
+    alert('Error saving installment. Please try again.');
+  }
 }
 
 // Switch between student form tabs
@@ -5714,11 +6262,14 @@ async function renderCashflow() {
     const expense = transactions.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
     const profit = income - expense;
 
+    const schoolStudents = (data.students||[]).filter(s => !currentSchoolId || s.schoolId === currentSchoolId);
+    const pendingBal = schoolStudents.reduce((sum,s)=>{const b=(s.totalFee||0)-(s.paid||0);return sum+(b>0?b:0);},0);
     const sum = document.getElementById('cf-summary');
     if(sum) sum.innerHTML = `
       <div class="cf-box cf-income"><div class="cfl">Total Income</div><div class="cfv">₹${income.toLocaleString()}</div></div>
       <div class="cf-box cf-expense"><div class="cfl">Total Expense</div><div class="cfv">₹${expense.toLocaleString()}</div></div>
       <div class="cf-box cf-profit"><div class="cfl">Net Profit</div><div class="cfv">₹${profit.toLocaleString()}</div></div>
+      <div class="cf-box" style="background:#fffbeb;border:1px solid #fde68a;"><div class="cfl">Pending from Students</div><div class="cfv" style="color:var(--warning);">₹${pendingBal.toLocaleString()}</div></div>
     `;
 
   const tb = document.getElementById('cf-table');
@@ -5738,13 +6289,115 @@ async function renderCashflow() {
   }
 }
 
+// ── OFFICE SELF-ATTENDANCE ───────────────────────────────────────────────────
+let officeAttMarked = false;
+
+function openOfficeAttModal() {
+  if (officeAttMarked) { showToast('✅ Attendance already marked for today!'); return; }
+  const now = new Date();
+  openModal('modal-self-attendance'); // reuse the same modal
+  const hh = String(now.getHours()).padStart(2,'0');
+  const mm = String(now.getMinutes()).padStart(2,'0');
+  const timeEl = document.getElementById('self-att-check-in');
+  if (timeEl) timeEl.value = hh + ':' + mm;
+  // Override the save button to call officeMarkPresent
+  const modal = document.getElementById('modal-self-attendance');
+  if (modal) {
+    const btn = modal.querySelector('.btn-accent');
+    if (btn) btn.onclick = officeMarkPresent;
+  }
+}
+
+async function officeMarkPresent() {
+  const status   = document.getElementById('self-att-status')?.value || 'present';
+  const time     = document.getElementById('self-att-check-in')?.value || '';
+  const location = document.getElementById('self-att-location')?.value || 'Office';
+  const note     = document.getElementById('self-att-note')?.value || '';
+  const today    = new Date().toISOString().split('T')[0];
+  officeAttMarked = true;
+
+  // Update office attendance page UI
+  const banner = document.getElementById('office-att-banner');
+  if (banner) banner.style.background = 'linear-gradient(135deg,#15803d,#16a34a)';
+  const msg = document.getElementById('office-att-msg');
+  if (msg) msg.textContent = status === 'late' ? '⏰ Marked — Late' : '✅ Attendance Marked — Present';
+  const sub = document.getElementById('office-att-sub');
+  if (sub) sub.textContent = 'Checked in at ' + time;
+  const tb = document.getElementById('office-att-time-block');
+  if (tb) { tb.style.display = 'block'; document.getElementById('office-att-time').textContent = time; }
+  const btn = document.getElementById('office-mark-btn');
+  if (btn) { btn.textContent = '✅ Marked'; btn.disabled = true; }
+
+  // Save to Firebase
+  const entry = {
+    date: today, time, status, location, note,
+    type: 'Office',
+    userName: currentUser ? (currentUser.displayName || currentUser.email) : 'Unknown',
+    userEmail: currentUser ? currentUser.email : '',
+    userId: currentUser ? currentUser.uid : '',
+    schoolId: currentSchoolId || ''
+  };
+  try {
+    if (typeof db !== 'undefined' && currentSchoolId) {
+      await db.collection('schools').doc(currentSchoolId).collection('attendance')
+        .doc(today + '_office_' + (currentUser ? currentUser.uid : 'unknown'))
+        .set(entry);
+    }
+    renderOfficeAttHistory();
+  } catch(e) { console.warn('Could not save office attendance:', e.message); }
+  closeModal('modal-self-attendance');
+  showToast('✅ Attendance marked!');
+}
+
+async function renderOfficeAttHistory() {
+  const today = new Date().toISOString().split('T')[0];
+  const thisMonth = today.slice(0,7);
+  try {
+    let records = [];
+    if (typeof db !== 'undefined' && currentSchoolId && currentUser) {
+      const snap = await db.collection('schools').doc(currentSchoolId).collection('attendance')
+        .where('userEmail','==', currentUser.email)
+        .where('date','>=', thisMonth + '-01')
+        .orderBy('date','desc').limit(30).get();
+      records = snap.docs.map(d => d.data());
+    }
+    let present=0, absent=0, late=0;
+    records.forEach(r => {
+      if(r.status==='present') present++;
+      else if(r.status==='absent') absent++;
+      else if(r.status==='late') late++;
+    });
+    const total = records.length;
+    const rate = total > 0 ? Math.round(((present+late)/total)*100) : 0;
+    const setEl = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
+    setEl('office-stat-present', present);
+    setEl('office-stat-absent', absent);
+    setEl('office-stat-rate', rate+'%');
+    setEl('office-stat-ontime', present);
+    const tbody = document.getElementById('office-att-history');
+    if (!tbody) return;
+    tbody.innerHTML = records.length === 0
+      ? '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text2);">No records yet.</td></tr>'
+      : records.map(r => {
+          const cls = r.status==='present'?'badge-green':r.status==='late'?'badge-amber':'badge-red';
+          return '<tr><td>'+r.date+'</td><td>'+r.time+'</td><td><span class="badge '+cls+'">'+r.status+'</span></td><td>'+(r.note||'—')+'</td></tr>';
+        }).join('');
+  } catch(e) { console.warn('office att history error:', e.message); }
+}
+
+// Hook office-attendance page into refreshPage
+const _origRefreshPage = typeof refreshPage === 'function' ? refreshPage : null;
+
 async function addTransaction() {
   // Check if user has permission to add transactions
   if (!hasActionPermission('add_transaction')) {
     alert('You do not have permission to add transactions.');
     return;
   }
-  
+  if (!currentSchoolId) {
+    alert('Please select a school first before adding a transaction.');
+    return;
+  }
   const amount = parseInt(document.getElementById('tx-amount').value);
   if(!amount){alert('Enter amount');return;}
   
@@ -5774,6 +6427,10 @@ function renderReport() {
   const period = document.getElementById('report-period')?.value || 'monthly';
   const rc = document.getElementById('report-content');
   if(!rc) return;
+
+  // Scope to current school
+  const schoolStudents = (data.students||[]).filter(s => !currentSchoolId || s.schoolId === currentSchoolId);
+  const schoolTx = (data.transactions||[]).filter(t => !currentSchoolId || t.schoolId === currentSchoolId);
 
   if(period==='monthly') {
     const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -5868,6 +6525,26 @@ function renderDLTests() {
   `).join('') || '<p style="color:var(--text3);font-size:13px;">No eligible students yet</p>';
 }
 
+function openScheduleDLModal() {
+  // Populate eligible students in DL dropdown
+  const sel = document.getElementById('dl-student');
+  if (sel) {
+    sel.innerHTML = '<option value="">Select Student</option>';
+    const eligible = data.students.filter(s => s.classes >= 22 && s.status !== 'Completed');
+    if (eligible.length === 0) {
+      sel.innerHTML += '<option value="" disabled>No eligible students (need 22+ classes)</option>';
+    } else {
+      eligible.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.name;
+        opt.textContent = s.name + ' — ' + s.classes + ' classes';
+        sel.appendChild(opt);
+      });
+    }
+  }
+  openModal('modal-schedule-dl');
+}
+
 function scheduleDLTest() {
   const student = document.getElementById('dl-student').value;
   const date = document.getElementById('dl-date').value;
@@ -5881,8 +6558,16 @@ function scheduleDLTest() {
 }
 
 function quickSchedule(name) {
-  document.getElementById('dl-student').value = name;
-  openModal('modal-schedule-dl');
+  openScheduleDLModal();
+  setTimeout(() => {
+    const sel = document.getElementById('dl-student');
+    if (sel) {
+      // Find or add the option
+      let found = false;
+      for (let opt of sel.options) { if (opt.value === name) { opt.selected = true; found = true; break; } }
+      if (!found) { const o = document.createElement('option'); o.value = name; o.textContent = name; o.selected = true; sel.appendChild(o); }
+    }
+  }, 50);
 }
 
 // ============================================================
@@ -5953,6 +6638,7 @@ function simulatePhoto() {
 }
 
 function renderAttendance() {
+  if (currentRole === 'instructor') renderSelfAttHistory();
   // Show attendance overview with quick stats and navigation
   renderAttendanceOverview();
 }
@@ -6975,6 +7661,8 @@ async function addDriverFuelEntry() {
 
     addNotification(`Fuel log submitted: ${vehicle} — ₹${cost.toLocaleString()} (${litres}L)`, 'success');
     renderDriverFuelPage();
+    // Refresh owner fuel dashboard if owner is viewing
+    if (typeof renderOwnerFuelDashboard === 'function') renderOwnerFuelDashboard();
 
   } catch (error) {
     console.error('Error saving fuel entry:', error);
@@ -7357,6 +8045,84 @@ function filterVehiclesBySchool() {
 function refreshVehicles() {
   renderVehicles();
   addNotification('Vehicle data refreshed', 'success');
+}
+
+function openAddVehicleModal() {
+  // Populate school dropdown
+  const schoolSel = document.getElementById('veh-school');
+  if (schoolSel) {
+    schoolSel.innerHTML = '<option value="">-- Select School --</option>';
+    (userSchools || []).forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.name || s.id;
+      opt.textContent = s.name || s.id;
+      if (s.id === currentSchoolId) opt.selected = true;
+      schoolSel.appendChild(opt);
+    });
+  }
+  // Populate instructor dropdown
+  const instSel = document.getElementById('veh-instructor');
+  if (instSel) {
+    instSel.innerHTML = '<option value="">-- Select Instructor --</option>';
+    const instructors = (data.staff || []).filter(s => s.role === 'instructor');
+    const adminInstructors = (data.admins || []).filter(a => a.role === 'instructor');
+    const allInst = instructors.length > 0 ? instructors : adminInstructors;
+    allInst.forEach(inst => {
+      const opt = document.createElement('option');
+      opt.value = inst.name;
+      opt.textContent = inst.name;
+      instSel.appendChild(opt);
+    });
+  }
+  // Set today as default maintenance date
+  const maintEl = document.getElementById('veh-maintenance');
+  if (maintEl && !maintEl.value) maintEl.value = new Date().toISOString().split('T')[0];
+  openModal('modal-add-vehicle');
+}
+
+async function saveNewVehicle() {
+  const name = document.getElementById('veh-name').value.trim();
+  const reg = document.getElementById('veh-reg').value.trim().toUpperCase();
+  if (!name || !reg) { alert('Vehicle name and registration are required'); return; }
+
+  const vehicleData = {
+    name, reg,
+    type: document.getElementById('veh-type').value,
+    status: document.getElementById('veh-status').value,
+    school: document.getElementById('veh-school').value || (userSchools[0] ? userSchools[0].name : ''),
+    instructor: document.getElementById('veh-instructor').value || 'Unassigned',
+    fuelLevel: parseInt(document.getElementById('veh-fuel').value) || 80,
+    lastMaintenance: document.getElementById('veh-maintenance').value || new Date().toISOString().split('T')[0],
+    chassis: document.getElementById('veh-chassis').value || '',
+    engine: document.getElementById('veh-engine').value || '',
+    insuranceExpiry: document.getElementById('veh-insurance-expiry').value || '',
+    fcExpiry: document.getElementById('veh-fc-expiry').value || '',
+    schoolId: currentSchoolId || '',
+    createdAt: new Date().toISOString()
+  };
+
+  try {
+    if (currentSchoolId && db) {
+      const docRef = await db.collection('schools').doc(currentSchoolId).collection('vehicles').add({
+        ...vehicleData,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      vehicleData.id = data.vehicles.length + 1;
+      vehicleData.firebaseId = docRef.id;
+    } else {
+      vehicleData.id = data.vehicles.length + 1;
+    }
+    data.vehicles.push(vehicleData);
+    closeModal('modal-add-vehicle');
+    renderVehicles();
+    // Also refresh vehicle dropdown in fuel modals
+    const fvSel = document.getElementById('fuel-vehicle-new');
+    if (fvSel) { const opt = document.createElement('option'); opt.value = vehicleData.name + ' (' + vehicleData.reg + ')'; opt.textContent = vehicleData.name + ' — ' + vehicleData.reg; fvSel.appendChild(opt); }
+    addNotification('Vehicle ' + name + ' (' + reg + ') added successfully', 'success');
+  } catch (err) {
+    console.error('Error adding vehicle:', err);
+    alert('Error saving vehicle. Please try again.');
+  }
 }
 
 function viewVehicleDetails(vehicleId) {
@@ -8112,11 +8878,16 @@ function openAdminModal() {
 function renderInstructorStudents() {
   const list = document.getElementById('instructor-students-list');
   if(!list) return;
-  const myStudents = data.students.filter(s => s.instructor === currentUser.displayName || currentUser.email);
+  const myStudents = (data.students || []).filter(s =>
+    (currentSchoolId ? s.schoolId === currentSchoolId : true) &&
+    (s.instructorEmail === (currentUser ? currentUser.email : '') ||
+     s.instructor === (currentUser ? currentUser.displayName : '') ||
+     s.instructor === (currentUser ? currentUser.email : ''))
+  );
   list.innerHTML = `<div class="two-col">` + myStudents.map(s => `
     <div class="card" style="margin:0;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
-        <div class="avatar" style="width:46px;height:46px;font-size:16px;background:${COLORS[s.id%COLORS.length]}22;color:${COLORS[s.id%COLORS.length]};">
+        <div class="avatar" style="width:46px;height:46px;font-size:16px;background:${COLORS[(typeof s.id==='number'?s.id:(s.name||'').charCodeAt(0)||0)%COLORS.length]}22;color:${COLORS[(typeof s.id==='number'?s.id:(s.name||'').charCodeAt(0)||0)%COLORS.length]};">
           ${s.name.split(' ').map(x=>x[0]).join('')}
         </div>
         <div>
@@ -8128,30 +8899,49 @@ function renderInstructorStudents() {
       <div style="font-size:13px;color:var(--text2);margin-bottom:10px;">${s.vehicle}</div>
       <div style="margin-bottom:8px;">
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
-          <span>Classes</span><span style="font-weight:600;">${s.classes}/27</span>
+          <span>Classes</span><span style="font-weight:600;">${s.classes}/${s.totalClasses||27}</span>
         </div>
         <div class="progress-bar">
-          <div class="progress-fill" style="width:${Math.round(s.classes/27*100)}%;background:${s.classes>=22?'var(--success)':'var(--accent2)'}"></div>
+          <div class="progress-fill" style="width:${Math.min(100,Math.round(s.classes/(s.totalClasses||27)*100))}%;background:${s.classes>=(s.totalClasses||27)?'var(--success)':'var(--accent2)'}"></div>
         </div>
       </div>
-      ${s.classes>=22?`<div class="alert alert-success" style="padding:8px 12px;font-size:12px;">✓ Eligible for DL Test</div>`:''}
-      <button class="btn btn-outline btn-sm" style="margin-top:8px;width:100%;" onclick="updateClasses(${s.id})">+ Mark Class Done</button>
+      ${s.classes>=(s.totalClasses||27)?`<div class="alert alert-success" style="padding:8px 12px;font-size:12px;">✓ Eligible for DL Test</div>`:''}
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn btn-outline btn-sm" style="flex:1;" onclick="updateClasses('${s.firebaseId||s.id}')">+ Mark Class</button>
+        <button class="btn btn-primary btn-sm" onclick="viewStudent('${s.firebaseId||s.id}')">View</button>
+      </div>
     </div>
   `).join('') + `</div>`;
 }
 
-async function updateClasses(id) {
+async function updateClasses(firebaseId) {
+  if (!firebaseId || !currentSchoolId) {
+    showToast('⚠ Cannot update — student ID missing'); return;
+  }
   try {
-    const student = await FirebaseService.getDocument(FirebaseService.studentsRef, id);
-    if(student && student.classes < 27) {
-      await FirebaseService.updateStudent(id, { classes: student.classes + 1 });
-      if(student.classes + 1 === 22) {
-        addNotification(`${student.name} completed 22 classes — eligible for DL test!`,'success');
-      }
+    const ref = db.collection('schools').doc(currentSchoolId).collection('students').doc(String(firebaseId));
+    const doc = await ref.get();
+    if (!doc.exists) { showToast('⚠ Student not found in database'); return; }
+    const student = { ...doc.data(), firebaseId: doc.id };
+    const maxClasses = student.totalClasses || 27;
+    if (student.classes >= maxClasses) {
+      showToast('✅ Student has already completed all ' + maxClasses + ' classes');
+      return;
     }
+    const newClasses = (student.classes || 0) + 1;
+    await ref.update({ classes: newClasses });
+    // Update local data
+    const local = data.students.find(s => s.firebaseId === String(firebaseId));
+    if (local) local.classes = newClasses;
+
+    if (newClasses === 22) addNotification(student.name + ' completed 22 classes — eligible for DL test!', 'success');
+    if (newClasses >= maxClasses) addNotification(student.name + ' completed all ' + maxClasses + ' classes!', 'success');
+
+    showToast('✅ Class marked — ' + student.name + ' now has ' + newClasses + '/' + maxClasses + ' classes');
+    renderInstructorStudents();
   } catch (error) {
     console.error('Error updating classes:', error);
-    alert('Error updating classes. Please try again.');
+    showToast('⚠ Error updating classes. Please try again.');
   }
 }
 
@@ -8765,6 +9555,138 @@ async function populateStaffSchoolDropdown() {
   }
 }
 
+
+// ============================================================
+// INCOME ANALYTICS
+// ============================================================
+let currentIncomeView = 'weekly';
+
+function switchIncomeView(view, btn) {
+  currentIncomeView = view;
+  document.querySelectorAll('[id^="income-btn-"]').forEach(b => {
+    b.className = b === btn ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm';
+  });
+  renderIncomeAnalytics();
+}
+
+function renderIncomeAnalytics() {
+  const container = document.getElementById('income-analytics-content');
+  if (!container) return;
+
+  const transactions = (data.transactions || []).filter(t => !currentSchoolId || t.schoolId === currentSchoolId);
+  const students = (data.students || []).filter(s => !currentSchoolId || s.schoolId === currentSchoolId);
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+
+  // Calculate total pending balance from students
+  const totalPending = students.reduce((sum, s) => {
+    const balance = (s.totalFee || 0) - (s.paid || 0);
+    return sum + (balance > 0 ? balance : 0);
+  }, 0);
+
+  let periods = [];
+  let labels = [];
+  let incomeData = [];
+  let expenseData = [];
+
+  if (currentIncomeView === 'daily') {
+    // Last 7 days
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const label = i === 0 ? 'Today' : d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric' });
+      labels.push(label);
+      const dayIncome = transactions.filter(t => t.type === 'income' && t.date === dateStr).reduce((s, t) => s + (t.amount || 0), 0);
+      const dayExpense = transactions.filter(t => t.type === 'expense' && t.date === dateStr).reduce((s, t) => s + (t.amount || 0), 0);
+      incomeData.push(dayIncome);
+      expenseData.push(dayExpense);
+    }
+  } else if (currentIncomeView === 'weekly') {
+    // Last 6 weeks
+    for (let i = 5; i >= 0; i--) {
+      const weekStart = new Date(now);
+      weekStart.setDate(weekStart.getDate() - (weekStart.getDay() || 7) + 1 - i * 7);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      const wsStr = weekStart.toISOString().split('T')[0];
+      const weStr = weekEnd.toISOString().split('T')[0];
+      labels.push('W' + (6 - i) + ' ' + weekStart.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }));
+      const wIncome = transactions.filter(t => t.type === 'income' && t.date >= wsStr && t.date <= weStr).reduce((s, t) => s + (t.amount || 0), 0);
+      const wExpense = transactions.filter(t => t.type === 'expense' && t.date >= wsStr && t.date <= weStr).reduce((s, t) => s + (t.amount || 0), 0);
+      incomeData.push(wIncome);
+      expenseData.push(wExpense);
+    }
+  } else if (currentIncomeView === 'monthly') {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    for (let i = 0; i < 12; i++) {
+      const mm = (i + 1).toString().padStart(2, '0');
+      const prefix = now.getFullYear() + '-' + mm;
+      labels.push(months[i]);
+      const mIncome = transactions.filter(t => t.type === 'income' && t.date && t.date.startsWith(prefix)).reduce((s, t) => s + (t.amount || 0), 0);
+      const mExpense = transactions.filter(t => t.type === 'expense' && t.date && t.date.startsWith(prefix)).reduce((s, t) => s + (t.amount || 0), 0);
+      incomeData.push(mIncome);
+      expenseData.push(mExpense);
+    }
+  } else if (currentIncomeView === 'yearly') {
+    const currentYear = now.getFullYear();
+    for (let y = currentYear - 3; y <= currentYear; y++) {
+      labels.push(y.toString());
+      const yIncome = transactions.filter(t => t.type === 'income' && t.date && t.date.startsWith(y.toString())).reduce((s, t) => s + (t.amount || 0), 0);
+      const yExpense = transactions.filter(t => t.type === 'expense' && t.date && t.date.startsWith(y.toString())).reduce((s, t) => s + (t.amount || 0), 0);
+      incomeData.push(yIncome);
+      expenseData.push(yExpense);
+    }
+  }
+
+  const totalIncome = incomeData.reduce((a, b) => a + b, 0);
+  const totalExpense = expenseData.reduce((a, b) => a + b, 0);
+  const maxVal = Math.max(...incomeData, ...expenseData, 1);
+
+  // Build bar chart + summary
+  const barsHtml = labels.map((label, i) => {
+    const ih = Math.round((incomeData[i] / maxVal) * 100);
+    const eh = Math.round((expenseData[i] / maxVal) * 100);
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;">
+      <div style="width:100%;display:flex;gap:2px;align-items:flex-end;height:100px;">
+        <div style="flex:1;background:linear-gradient(to top,#16a34a,#4ade80);height:${ih}%;border-radius:3px 3px 0 0;min-height:2px;" title="Income: ₹${incomeData[i].toLocaleString()}"></div>
+        <div style="flex:1;background:linear-gradient(to top,#dc2626,#f87171);height:${eh}%;border-radius:3px 3px 0 0;min-height:2px;" title="Expense: ₹${expenseData[i].toLocaleString()}"></div>
+      </div>
+      <div style="font-size:9px;color:var(--text2);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;">${label}</div>
+    </div>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
+      <div style="background:#f0fdf4;border-radius:8px;padding:12px;text-align:center;border:1px solid #bbf7d0;">
+        <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:4px;">Total Income</div>
+        <div style="font-size:18px;font-weight:700;font-family:'Syne';color:var(--success);">₹${totalIncome.toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--text2);">this period</div>
+      </div>
+      <div style="background:#fef2f2;border-radius:8px;padding:12px;text-align:center;border:1px solid #fecaca;">
+        <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:4px;">Total Expense</div>
+        <div style="font-size:18px;font-weight:700;font-family:'Syne';color:var(--danger);">₹${totalExpense.toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--text2);">this period</div>
+      </div>
+      <div style="background:#eff6ff;border-radius:8px;padding:12px;text-align:center;border:1px solid #bfdbfe;">
+        <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:4px;">Net Profit</div>
+        <div style="font-size:18px;font-weight:700;font-family:'Syne';color:var(--accent2);">₹${(totalIncome-totalExpense).toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--text2);">this period</div>
+      </div>
+      <div style="background:#fffbeb;border-radius:8px;padding:12px;text-align:center;border:1px solid #fde68a;">
+        <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:4px;">Pending Balance</div>
+        <div style="font-size:18px;font-weight:700;font-family:'Syne';color:var(--warning);">₹${totalPending.toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--text2);">from ${students.filter(s=>(s.totalFee||0)>(s.paid||0)).length} students</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:8px;">
+      <span style="display:flex;align-items:center;gap:4px;font-size:11px;"><span style="width:12px;height:12px;background:var(--success);border-radius:2px;display:inline-block;"></span> Income</span>
+      <span style="display:flex;align-items:center;gap:4px;font-size:11px;"><span style="width:12px;height:12px;background:var(--danger);border-radius:2px;display:inline-block;"></span> Expense</span>
+    </div>
+    <div style="display:flex;gap:4px;align-items:flex-end;">${barsHtml}</div>
+  `;
+}
+
 // ============================================================
 // MODALS
 // ============================================================
@@ -8788,5 +9710,54 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('dash-date').textContent = new Date().toLocaleDateString('en-IN',{weekday:'short',year:'numeric',month:'short',day:'numeric'});
 });
 </script>
+
+<!-- ADD VEHICLE MODAL -->
+<div class="modal-overlay" id="modal-add-vehicle">
+  <div class="modal" style="width:600px;max-width:96vw;">
+    <div class="modal-header">
+      <h3>🚗 Add Vehicle</h3>
+      <button class="modal-close" onclick="closeModal('modal-add-vehicle')">✕</button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group"><label>Vehicle Name *</label><input type="text" id="veh-name" placeholder="e.g. Maruti Swift"></div>
+      <div class="form-group"><label>Registration Number *</label><input type="text" id="veh-reg" placeholder="e.g. KA01AB1234"></div>
+      <div class="form-group"><label>Vehicle Type *</label>
+        <select id="veh-type">
+          <option value="2-Wheeler">2-Wheeler</option>
+          <option value="4-Wheeler (LMV)" selected>4-Wheeler (LMV)</option>
+          <option value="Heavy Vehicle">Heavy Vehicle</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Status</label>
+        <select id="veh-status">
+          <option value="active">Active</option>
+          <option value="maintenance">Maintenance</option>
+          <option value="inactive">Inactive</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Assign to School</label>
+        <select id="veh-school"><option value="">-- Select School --</option></select>
+      </div>
+      <div class="form-group"><label>Assign Instructor</label>
+        <select id="veh-instructor"><option value="">-- Select Instructor --</option></select>
+      </div>
+      <div class="form-group"><label>Fuel Level (%)</label>
+        <input type="number" id="veh-fuel" placeholder="e.g. 80" min="0" max="100" value="80">
+      </div>
+      <div class="form-group"><label>Last Maintenance Date</label>
+        <input type="date" id="veh-maintenance">
+      </div>
+      <div class="form-group"><label>Chassis Number</label><input type="text" id="veh-chassis" placeholder="Optional"></div>
+      <div class="form-group"><label>Engine Number</label><input type="text" id="veh-engine" placeholder="Optional"></div>
+      <div class="form-group"><label>Insurance Expiry</label><input type="date" id="veh-insurance-expiry"></div>
+      <div class="form-group"><label>FC Expiry</label><input type="date" id="veh-fc-expiry"></div>
+    </div>
+    <div style="margin-top:20px;display:flex;gap:10px;">
+      <button class="btn btn-accent" onclick="saveNewVehicle()" style="flex:1;">✓ Add Vehicle</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-add-vehicle')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
