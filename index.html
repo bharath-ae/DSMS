@@ -644,6 +644,7 @@
 
 <!-- MAIN APP -->
 <div id="app">
+
   <div class="app-layout">
     <!-- SIDEBAR -->
     <aside class="sidebar">
@@ -3763,11 +3764,49 @@ service cloud.firestore {
       match /notifications/{notifId} {
         allow read, write: if isOwner(schoolId) || isSchoolMember(schoolId);
       }
-      
-      // Default deny for all other collections
-      match /{collection}/{documentId} {
-        allow read, write: if false;
+
+      // Other Services subcollection
+      match /otherServices/{serviceId} {
+        allow read, write: if isOwner(schoolId) || hasRole(schoolId, 'office');
+        allow read: if isSchoolMember(schoolId);
       }
+
+      // Vehicles subcollection
+      match /vehicles/{vehicleId} {
+        allow read, write: if isOwner(schoolId) || hasRole(schoolId, 'office');
+        allow read: if isSchoolMember(schoolId);
+      }
+
+      // DL Tests subcollection
+      match /dlTests/{dlTestId} {
+        allow read, write: if isOwner(schoolId) || hasRole(schoolId, 'office');
+        allow read: if isSchoolMember(schoolId);
+      }
+
+      // Student Attendance subcollection
+      match /studentAttendance/{attId} {
+        allow read, write: if isOwner(schoolId) || hasRole(schoolId, 'office') || hasRole(schoolId, 'instructor');
+      }
+
+      // Staff Attendance subcollection
+      match /staffAttendance/{attId} {
+        allow read, write: if isOwner(schoolId) || hasRole(schoolId, 'office') || isSchoolMember(schoolId);
+      }
+
+      // Admin Attendance subcollection
+      match /adminAttendance/{attId} {
+        allow read, write: if isOwner(schoolId) || hasRole(schoolId, 'office') || isSchoolMember(schoolId);
+      }
+
+      // Instructor Attendance subcollection
+      match /instructorAttendance/{attId} {
+        allow read, write: if isOwner(schoolId) || hasRole(schoolId, 'office') || isSchoolMember(schoolId);
+      }
+
+      // NOTE: The catch-all deny rule below has been REMOVED.
+      // Previously `match /{collection}/{documentId} { allow read, write: if false; }`
+      // was blocking otherServices, vehicles, dlTests, and attendance sub-collections.
+      // Firestore's default is already deny — no catch-all needed.
     }
   }
 }
@@ -10881,6 +10920,8 @@ async function saveOtherService() {
     installmentFreq: document.getElementById('os-inst-freq')?.value||'Monthly',
     installments: initialPayment>0?[{date:document.getElementById('os-date')?.value||new Date().toISOString().split('T')[0],amount:initialPayment,mode:document.getElementById('os-payment-mode')?.value||'Cash',note:'Initial payment'}]:[],
     schoolId: currentSchoolId,
+    // Include ownerId and ownerEmail so Firestore isOwner() rule passes
+    ...FirebaseService.getOwnerScope(currentSchoolId),
     createdAt: new Date().toISOString()
   };
   try {
@@ -10900,7 +10941,14 @@ async function saveOtherService() {
     document.getElementById('modal-add-other-service').remove();
     renderOtherServices();
     addNotification(`Other service added: ${clientName}`, 'success');
-  } catch(e) { console.error(e); alert('Error saving service: ' + e.message); }
+  } catch(e) {
+    console.error(e);
+    if (e.code === 'permission-denied' || (e.message && e.message.toLowerCase().includes('permission'))) {
+      alert('⚠️ Firebase Permission Error: Your Firestore security rules are blocking the "otherServices" collection.\n\nPlease update your Firebase Firestore rules to include:\n\nmatch /otherServices/{serviceId} {\n  allow read, write: if isOwner(schoolId) || hasRole(schoolId, \'office\');\n  allow read: if isSchoolMember(schoolId);\n}\n\nSee the Firebase Console → Firestore → Rules.\nA banner in the app also shows the complete updated rules.');
+    } else {
+      alert('Error saving service: ' + e.message);
+    }
+  }
 }
 
 function viewOtherService(id) {
@@ -11513,8 +11561,9 @@ async function addAdminFromModal() {
     adminData.userId = adminUid;
     adminData.firebaseId = adminUid;
 
-    // Add to local list
-    data.admins.push(adminData);
+    // NOTE: Do NOT push to data.admins here manually.
+    // The real-time Firestore snapshot listener already picks up the new doc.
+    // A manual push would cause a duplicate entry in the admins table.
 
     // Save to Firebase — use UID as doc ID so isSchoolMember() rule works
     if (schoolId) {
@@ -11676,11 +11725,14 @@ function populateAdminSchoolDropdown() {
   
   schoolSelect.innerHTML = '<option value="">Choose a school...</option>';
   
-  if (currentRole === 'owner' && userSchools.length > 0) {
-    userSchools.forEach(school => {
+  // Always use the global userSchools array which is populated on login
+  const schools = userSchools && userSchools.length > 0 ? userSchools : [];
+  
+  if (currentRole === 'owner' && schools.length > 0) {
+    schools.forEach(school => {
       const option = document.createElement('option');
       option.value = school.id;
-      option.textContent = school.name;
+      option.textContent = school.name || school.id;
       if (currentSchoolId === school.id) {
         option.selected = true;
       }
@@ -11688,14 +11740,28 @@ function populateAdminSchoolDropdown() {
     });
   } else if (currentSchoolId) {
     // For office/instructor roles, show current school
-    const currentSchool = userSchools.find(s => s.id === currentSchoolId);
-    if (currentSchool) {
-      const option = document.createElement('option');
-      option.value = currentSchool.id;
-      option.textContent = currentSchool.name;
-      option.selected = true;
-      schoolSelect.appendChild(option);
-    }
+    const currentSchool = (userSchools || []).find(s => s.id === currentSchoolId);
+    const option = document.createElement('option');
+    option.value = currentSchoolId;
+    option.textContent = (currentSchool && currentSchool.name) ? currentSchool.name : (data.school?.name || 'Current School');
+    option.selected = true;
+    schoolSelect.appendChild(option);
+  }
+
+  // If no schools loaded yet, try fetching them
+  if (schoolSelect.options.length <= 1 && currentRole === 'owner' && currentUser) {
+    FirebaseService.getUserSchools(currentUser.uid).then(fetchedSchools => {
+      if (fetchedSchools && fetchedSchools.length > 0) {
+        userSchools = fetchedSchools;
+        fetchedSchools.forEach(school => {
+          const option = document.createElement('option');
+          option.value = school.id;
+          option.textContent = school.name || school.id;
+          if (currentSchoolId === school.id) option.selected = true;
+          schoolSelect.appendChild(option);
+        });
+      }
+    }).catch(e => console.warn('Could not fetch schools for admin dropdown:', e.message));
   }
 }
 
@@ -12346,7 +12412,6 @@ async function addStaffFromModal() {
     const normalizedRole = role === 'instructor' ? 'instructor' : 'office';
 
     // Write membership doc to schools/{id}/users so isSchoolMember() rule passes for this user.
-    // Requires Firestore rule: allow write: if isSchoolMember(schoolId) on /users/{userId}
     try {
       await db.collection('schools').doc(schoolId).collection('users').doc(staffUid).set({
         userId: staffUid,
@@ -12362,12 +12427,11 @@ async function addStaffFromModal() {
       });
     } catch (usersErr) {
       console.warn('Could not write users membership doc (check Firestore rules):', usersErr.message);
-      // Non-fatal: staff is saved; owner can re-add via Admin Management to fix membership
     }
 
-    // Update local data
-    if (!data.staff) data.staff = [];
-    data.staff.push({...staffData, id: staffUid});
+    // NOTE: Do NOT manually push to data.staff here.
+    // The real-time Firestore snapshot listener (setupRealtimeListeners) already
+    // picks up the new doc and adds it — a manual push here would cause a duplicate entry.
 
     // Write userSchools top-level index so the new staff member can log in
     let ownerEmail = null;
@@ -12630,12 +12694,19 @@ async function populateStaffSchoolDropdown() {
   
   try {
     if (currentRole === 'owner') {
-      // Owner can add staff to any school they own
-      const schools = await FirebaseService.getUserSchools(auth.currentUser.uid);
+      // Use global userSchools first (already populated on login)
+      let schools = userSchools && userSchools.length > 0 ? userSchools : [];
+
+      // If empty, fetch from Firebase
+      if (schools.length === 0 && auth && auth.currentUser) {
+        schools = await FirebaseService.getUserSchools(auth.currentUser.uid);
+        if (schools && schools.length > 0) userSchools = schools;
+      }
+
       schools.forEach(school => {
         const option = document.createElement('option');
         option.value = school.id;
-        option.textContent = school.name;
+        option.textContent = school.name || school.id;
         select.appendChild(option);
       });
       // If current school is selected, set it as default
@@ -12645,9 +12716,10 @@ async function populateStaffSchoolDropdown() {
     } else {
       // Office staff can only add staff to their current school
       if (currentSchoolId) {
+        const currentSchool = (userSchools || []).find(s => s.id === currentSchoolId);
         const option = document.createElement('option');
         option.value = currentSchoolId;
-        option.textContent = data.school?.name || 'Current School';
+        option.textContent = (currentSchool && currentSchool.name) ? currentSchool.name : (data.school?.name || 'Current School');
         select.appendChild(option);
         select.value = currentSchoolId;
       }
