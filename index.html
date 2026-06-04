@@ -11162,7 +11162,7 @@ async function renderStudentTracking() {
     '<div class="card" style="padding:0;overflow:hidden;">' +
       '<div style="padding:14px 20px;border-bottom:1px solid var(--border);font-family:\'Syne\';font-size:14px;font-weight:600;">Student Progress Tracker</div>' +
       '<div style="overflow-x:auto;">' +
-        '<table class="data-table"><thead><tr><th>Student</th><th>Instructor</th><th>Progress</th><th>Fee Status</th><th>Today\'s Attendance</th><th>Action</th></tr></thead>' +
+        '<table class="data-table"><thead><tr><th style="white-space:nowrap;">Student ID</th><th>Student</th><th>Instructor</th><th>Progress</th><th>Fee Status</th><th>Today\'s Attendance</th><th>Action</th></tr></thead>' +
         '<tbody id="tracking-tbody">' + buildTrackingRows(activeStudents, today) + '</tbody>' +
         '</table>' +
       '</div>' +
@@ -11171,7 +11171,7 @@ async function renderStudentTracking() {
 
 function buildTrackingRows(students, date) {
   if (!students || students.length === 0) {
-    return '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text2);">No students match this filter.</td></tr>';
+    return '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text2);">No students match this filter.</td></tr>';
   }
   return students.map(function(s) {
     const totalFee = s.totalFee || 0;
@@ -11182,6 +11182,7 @@ function buildTrackingRows(students, date) {
     const pct = Math.min(100, Math.round(classes / total * 100));
     const dlEligible = classes >= total;
     const sid = s.firebaseId || s.id || '';
+    const displayId = s.studentId || s.admissionNo || s.enrollmentNo || (sid ? sid.substring(0, 8).toUpperCase() : '—');
 
     // Check today's attendance from loaded records
     const todayAtt = (data.studentAttendanceRecords || []).find(function(a) {
@@ -11199,6 +11200,7 @@ function buildTrackingRows(students, date) {
       '</div>';
 
     return '<tr>' +
+      '<td><span style="font-family:monospace;font-size:12px;background:var(--bg2,#f1f5f9);padding:3px 8px;border-radius:6px;font-weight:600;color:var(--primary);white-space:nowrap;">' + displayId + '</span></td>' +
       '<td><div style="font-weight:500;">' + (s.name||'Unknown') + '</div><div style="font-size:11px;color:var(--text2);">' + (s.phone||'') + '</div></td>' +
       '<td style="font-size:12px;">' + (s.instructor||'—') + '</td>' +
       '<td>' + progressBar + '</td>' +
